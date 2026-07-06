@@ -1,6 +1,13 @@
 import { supabase } from "./supabaseClient";
 import { useState, useEffect, useRef } from "react";
 
+// ─── Username helpers ───────────────────────────────────────────────────────────
+// Supabase Auth needs an email under the hood. Users only ever type a username;
+// we map it to a hidden internal address they never see. No real email involved.
+const USER_DOMAIN = "@healthtracker.local";
+const toEmail = u => u.trim().toLowerCase() + USER_DOMAIN;
+const toName = e => (e || "").replace(/@healthtracker\.local$/i, "");
+
 // Map the app's storage keys to Supabase table names
 const TABLE = {
   "appointments": "appointments",
@@ -713,23 +720,28 @@ function LoginPage({onLogin}){
   const [err,setErr]=useState(""); const [loading,setLoading]=useState(false);
   const reset=()=>{setErr("");setPassword("");setConfirm("");};
 const doLogin = async () => {
-  if (!username.trim() || !password) { setErr("Enter your email and password."); return; }
+  if (!username.trim() || !password) { setErr("Enter your username and password."); return; }
   setLoading(true); setErr("");
   const { error } = await supabase.auth.signInWithPassword({
-    email: username.trim(), password,
+    email: toEmail(username), password,
   });
-  if (error) { setErr(error.message); setLoading(false); return; }
+  if (error) { setErr("Incorrect username or password."); setLoading(false); return; }
   onLogin(username.trim());
 };
 const doSignup = async () => {
   if (!username.trim() || !password) { setErr("Fill in all fields."); return; }
+  if (username.trim().length < 3) { setErr("Username must be at least 3 characters."); return; }
+  if (/[^a-zA-Z0-9._-]/.test(username.trim())) { setErr("Username can only use letters, numbers, and . _ -"); return; }
   if (password.length < 6) { setErr("Password must be at least 6 characters."); return; }
   if (password !== confirm) { setErr("Passwords do not match."); return; }
   setLoading(true); setErr("");
   const { error } = await supabase.auth.signUp({
-    email: username.trim(), password,
+    email: toEmail(username), password,
   });
-  if (error) { setErr(error.message); setLoading(false); return; }
+  if (error) {
+    setErr(/registered|exists/i.test(error.message) ? "That username is already taken." : error.message);
+    setLoading(false); return;
+  }
   onLogin(username.trim());
 };
   const go=mode==="login"?doLogin:doSignup;
@@ -749,7 +761,7 @@ const doSignup = async () => {
         {err&&<div style={{background:"#FEF2F2",borderRadius:6,padding:"10px 13px",marginBottom:16,fontSize:13,color:C.due}}>{err}</div>}
         <div style={{marginBottom:14}}>
           <label style={s.label}>Username</label>
-          <SI value={username} onChange={setUsername} placeholder="Enter username"/>
+          <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Choose a username" style={s.input} onKeyDown={e=>e.key==="Enter"&&go()}/>
         </div>
         <div style={{marginBottom:mode==="signup"?14:22}}>
           <label style={s.label}>Password</label>
@@ -766,10 +778,81 @@ const doSignup = async () => {
   );
 }
 
+// ─── Settings tab ───────────────────────────────────────────────────────────────
+function SettingsTab({user}){
+  const currentName = toName(user);
+  const [newName,setNewName]=useState("");
+  const [nameMsg,setNameMsg]=useState(null); // {type:"ok"|"err", text}
+  const [nameBusy,setNameBusy]=useState(false);
+
+  const [pw,setPw]=useState(""); const [pw2,setPw2]=useState("");
+  const [pwMsg,setPwMsg]=useState(null);
+  const [pwBusy,setPwBusy]=useState(false);
+
+  const changeName=async()=>{
+    setNameMsg(null);
+    const n=newName.trim();
+    if(!n){setNameMsg({type:"err",text:"Enter a new username."});return;}
+    if(n.length<3){setNameMsg({type:"err",text:"Username must be at least 3 characters."});return;}
+    if(/[^a-zA-Z0-9._-]/.test(n)){setNameMsg({type:"err",text:"Username can only use letters, numbers, and . _ -"});return;}
+    if(n.toLowerCase()===currentName.toLowerCase()){setNameMsg({type:"err",text:"That's already your username."});return;}
+    setNameBusy(true);
+    const { error } = await supabase.auth.updateUser({ email: toEmail(n) });
+    setNameBusy(false);
+    if(error){ setNameMsg({type:"err",text:/registered|exists/i.test(error.message)?"That username is already taken.":error.message}); return; }
+    setNameMsg({type:"ok",text:`Username changed to "${n}". Use it next time you sign in.`});
+    setNewName("");
+  };
+
+  const changePassword=async()=>{
+    setPwMsg(null);
+    if(!pw||pw.length<6){setPwMsg({type:"err",text:"Password must be at least 6 characters."});return;}
+    if(pw!==pw2){setPwMsg({type:"err",text:"Passwords do not match."});return;}
+    setPwBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setPwBusy(false);
+    if(error){ setPwMsg({type:"err",text:error.message}); return; }
+    setPwMsg({type:"ok",text:"Password updated successfully."});
+    setPw(""); setPw2("");
+  };
+
+  const Note=({msg})=>msg?(
+    <div style={{background:msg.type==="ok"?C.accentSoft:"#FEF2F2",border:`1px solid ${msg.type==="ok"?C.accent+"33":"#FECACA"}`,borderRadius:8,padding:"10px 13px",marginTop:12,fontSize:13,color:msg.type==="ok"?C.ink:C.due,lineHeight:1.5}}>{msg.text}</div>
+  ):null;
+
+  const card={background:C.surface,border:`1px solid ${C.line}`,borderRadius:12,padding:24,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"};
+
+  return (
+    <div style={{maxWidth:520}}>
+      <div style={{fontSize:12.5,color:C.faint,marginBottom:22}}>Signed in as <span style={{color:C.ink,fontWeight:600}}>{currentName}</span></div>
+
+      {/* Change username */}
+      <div style={{...card,marginBottom:20}}>
+        <SectionHead>Change username</SectionHead>
+        <p style={{fontSize:13,color:C.sub,margin:"0 0 16px",lineHeight:1.5}}>Pick a new username. It takes effect right away — use it the next time you sign in.</p>
+        <Field label="Current username"><input value={currentName} disabled style={{...s.input,background:C.lineSoft,color:C.faint,cursor:"not-allowed"}}/></Field>
+        <Field label="New username" hint="Letters, numbers, and . _ - only"><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="new username" style={s.input}/></Field>
+        <button onClick={changeName} disabled={nameBusy} style={{...s.btn("primary"),opacity:nameBusy?0.7:1,cursor:nameBusy?"not-allowed":"pointer"}}>{nameBusy?"Saving…":"Change username"}</button>
+        <Note msg={nameMsg}/>
+      </div>
+
+      {/* Reset password */}
+      <div style={card}>
+        <SectionHead>Reset password</SectionHead>
+        <p style={{fontSize:13,color:C.sub,margin:"0 0 16px",lineHeight:1.5}}>Set a new password for your account. You'll stay signed in on this device.</p>
+        <Field label="New password"><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="At least 6 characters" style={s.input}/></Field>
+        <Field label="Confirm new password"><input type="password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="Re-enter new password" style={s.input}/></Field>
+        <button onClick={changePassword} disabled={pwBusy} style={{...s.btn("primary"),opacity:pwBusy?0.7:1,cursor:pwBusy?"not-allowed":"pointer"}}>{pwBusy?"Updating…":"Update password"}</button>
+        <Note msg={pwMsg}/>
+      </div>
+    </div>
+  );
+}
+
 // ─── App shell ──────────────────────────────────────────────────────────────────
 const TABS=[{id:"dashboard",label:"Dashboard"},{id:"appointments",label:"Appointments"},{id:"insurance",label:"Insurance"},{id:"clinics",label:"Clinics"},{id:"reports",label:"Reports"}];
 export default function App(){
-const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null);
   const [tab, setTab] = useState("dashboard");
   const [checking, setChecking] = useState(true);
   useEffect(() => {
@@ -784,7 +867,7 @@ const [user, setUser] = useState(null);
   }, []);
   if (checking) return <div style={{minHeight:"100vh",background:C.canvas}}/>;
   if (!user) return <LoginPage onLogin={u=>{setUser(u);setTab("dashboard");}}/>;
-    return (
+  return (
     <div style={{minHeight:"100vh",background:C.canvas,fontFamily:FONT,color:C.ink}}>
       {/* Top bar */}
       <div style={{borderBottom:`1px solid ${C.line}`,background:C.surface}}>
@@ -793,8 +876,8 @@ const [user, setUser] = useState(null);
             <span style={{fontSize:16,fontWeight:800,letterSpacing:-0.3,color:C.ink}}>Healthcare Tracker</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <span style={{fontSize:13,color:C.faint}}>{user}</span>
-           <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${C.line}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:12.5,fontFamily:FONT,fontWeight:500}}>Sign out</button>
+            <button onClick={()=>setTab("settings")} style={{fontSize:13,color:tab==="settings"?C.ink:C.faint,background:"none",border:"none",cursor:"pointer",fontFamily:FONT,fontWeight:500,padding:0}}>{toName(user)}</button>
+            <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${C.line}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:12.5,fontFamily:FONT,fontWeight:500}}>Sign out</button>
           </div>
         </div>
       </div>
@@ -805,6 +888,10 @@ const [user, setUser] = useState(null);
             <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"13px 4px",marginRight:18,border:"none",background:"none",cursor:"pointer",fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,
               color:active?C.ink:C.faint,borderBottom:`2px solid ${active?C.accent:"transparent"}`,whiteSpace:"nowrap",transition:"color .12s"}}>{t.label}</button>
           );})}
+          {(()=>{const active=tab==="settings";return(
+            <button onClick={()=>setTab("settings")} style={{padding:"13px 4px",marginRight:18,marginLeft:"auto",border:"none",background:"none",cursor:"pointer",fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,
+              color:active?C.ink:C.faint,borderBottom:`2px solid ${active?C.accent:"transparent"}`,whiteSpace:"nowrap",transition:"color .12s"}}>Settings</button>
+          );})()}
         </div>
       </div>
       {/* Content */}
@@ -814,6 +901,7 @@ const [user, setUser] = useState(null);
         {tab==="reports"&&<ReportsTab/>}
         {tab==="insurance"&&<InsuranceTab/>}
         {tab==="clinics"&&<ClinicsTab/>}
+        {tab==="settings"&&<SettingsTab user={user}/>}
       </div>
     </div>
   );
