@@ -910,93 +910,6 @@ const doSignup = async () => {
   );
 }
 
-// ─── Doctor AI — floating assistant grounded in the user's own data ───────────────
-function DoctorAI(){
-  const [open,setOpen]=useState(false);
-  const [msgs,setMsgs]=useState([{role:"assistant",content:"Hi! I'm Doctor AI. Ask me anything about your appointments, reports, insurance, or clinics — I can only see the information you've saved here."}]);
-  const [input,setInput]=useState("");
-  const [busy,setBusy]=useState(false);
-  const scrollRef=useRef(null);
-  useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop=scrollRef.current.scrollHeight; },[msgs,open,busy]);
-
-  async function gatherContext(){
-    const [appointments,reports,insurance,clinics]=await Promise.all([
-      store.get("appointments"),store.get("reports"),store.get("insurance-cards"),store.get("kiv-clinics"),
-    ]);
-    // Strip large base64 file blobs — keep only filenames so the prompt stays small
-    const slimFiles=arr=>(arr||[]).map(f=>f?.name).filter(Boolean);
-    const slim=(list,keys)=>(list||[]).map(x=>{const o={};keys.forEach(k=>{if(x[k]!==undefined&&x[k]!=="")o[k]=x[k];});return o;});
-    return {
-      appointments:slim(appointments,["category","type","clinic","clinicContact","date","nextAppointmentDate","paidAmount","toPayAmount","paid","insuranceStatus","notes"]).map((a,i)=>({...a,receipts:slimFiles(appointments[i]?.receipts),eobs:slimFiles(appointments[i]?.eobs)})),
-      reports:slim(reports,["title","category","type","date","notes"]).map((r,i)=>({...r,files:slimFiles(reports[i]?.files)})),
-      insurance:slim(insurance,["insurer","planName","type","memberId","coverageStart","coverageEnd","deductible","outOfPocket","copay","notes"]),
-      clinics:slim(clinics,["name","category","type","contact","location"]),
-    };
-  }
-
-  async function send(){
-    const q=input.trim(); if(!q||busy)return;
-    setInput(""); setBusy(true);
-    const history=[...msgs,{role:"user",content:q}];
-    setMsgs(history);
-    try{
-      const ctx=await gatherContext();
-      const system=`You are Doctor AI, a helpful assistant inside a personal health-tracking app. Answer the user's questions using ONLY the JSON data provided about their own health records. Be concise, warm, and practical. If the answer isn't in their data, say so plainly. Never invent appointments, amounts, or medical facts. You are not a substitute for a licensed clinician; for medical decisions, suggest they consult their doctor. All monetary amounts are in the user's own currency.\n\nUSER DATA (JSON):\n${JSON.stringify(ctx)}`;
-      const apiMsgs=history.filter(m=>m.role==="user"||m.role==="assistant").map(m=>({role:m.role,content:m.content}));
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system,messages:apiMsgs}),
-      });
-      const data=await res.json();
-      const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim()||"Sorry, I couldn't generate a response. Please try again.";
-      setMsgs(m=>[...m,{role:"assistant",content:text}]);
-    }catch(e){
-      setMsgs(m=>[...m,{role:"assistant",content:"Something went wrong reaching the AI service. Please try again in a moment."}]);
-    }finally{ setBusy(false); }
-  }
-
-  return (
-    <>
-      {/* Floating button */}
-      <button onClick={()=>setOpen(o=>!o)} title="Doctor AI"
-        style={{position:"fixed",right:24,bottom:24,zIndex:200,display:"flex",alignItems:"center",gap:9,padding:"12px 18px",borderRadius:30,border:"none",cursor:"pointer",
-          background:C.accent,color:"#fff",fontFamily:FONT,fontSize:14,fontWeight:700,boxShadow:"0 6px 20px rgba(37,99,235,0.35)"}}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M6 8v3a6 6 0 0 0 12 0V8"/><path d="M12 17v2a4 4 0 0 0 4 4"/><circle cx="20" cy="21" r="2"/></svg>
-        {open?"Close":"Doctor AI"}
-      </button>
-
-      {/* Chat panel */}
-      {open&&(
-        <div style={{position:"fixed",right:24,bottom:84,zIndex:200,width:"min(400px, calc(100vw - 48px))",height:"min(560px, calc(100vh - 130px))",display:"flex",flexDirection:"column",
-          background:C.surface,border:`1px solid ${C.line}`,borderRadius:18,boxShadow:"0 16px 48px rgba(21,32,51,0.22)",overflow:"hidden"}}>
-          <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"center",gap:10,background:C.tintBg}}>
-            <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:9,background:C.accent,color:"#fff"}}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M6 8v3a6 6 0 0 0 12 0V8"/><path d="M12 17v2a4 4 0 0 0 4 4"/><circle cx="20" cy="21" r="2"/></svg>
-            </span>
-            <div style={{lineHeight:1.2}}>
-              <div style={{fontSize:14,fontWeight:800,color:C.ink}}>Doctor AI</div>
-              <div style={{fontSize:11,color:C.sub}}>Grounded in your saved data</div>
-            </div>
-          </div>
-          <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
-            {msgs.map((m,i)=>(
-              <div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"85%",padding:"9px 13px",borderRadius:14,fontSize:13.5,lineHeight:1.5,whiteSpace:"pre-wrap",
-                background:m.role==="user"?C.accent:C.tintBg,color:m.role==="user"?"#fff":C.ink,
-                borderBottomRightRadius:m.role==="user"?4:14,borderBottomLeftRadius:m.role==="user"?14:4}}>{m.content}</div>
-            ))}
-            {busy&&<div style={{alignSelf:"flex-start",padding:"9px 13px",borderRadius:14,fontSize:13.5,color:C.faint,background:C.tintBg}}>Thinking…</div>}
-          </div>
-          <div style={{padding:"12px 14px",borderTop:`1px solid ${C.line}`,display:"flex",gap:8}}>
-            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Ask about your health records…"
-              style={{...s.input,padding:"10px 12px",borderRadius:10}}/>
-            <button onClick={send} disabled={busy||!input.trim()} style={{...s.btn("primary"),padding:"10px 16px",opacity:busy||!input.trim()?0.5:1,cursor:busy||!input.trim()?"not-allowed":"pointer"}}>Send</button>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
 // ─── App shell ──────────────────────────────────────────────────────────────────
 const TABS=[{id:"dashboard",label:"Dashboard"},{id:"appointments",label:"Appointments"},{id:"insurance",label:"Insurance"},{id:"clinics",label:"Clinics"},{id:"reports",label:"Reports"}];
 export default function App(){
@@ -1049,7 +962,6 @@ export default function App(){
         {tab==="insurance"&&<InsuranceTab/>}
         {tab==="clinics"&&<ClinicsTab/>}
       </div>
-      <DoctorAI/>
     </div>
   );
 }
