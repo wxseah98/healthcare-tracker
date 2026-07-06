@@ -1,13 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { useState, useEffect, useRef } from "react";
 
-// ─── Username helpers ───────────────────────────────────────────────────────────
-// Supabase Auth needs an email under the hood. Users only ever type a username;
-// we map it to a hidden internal address they never see. No real email involved.
-const USER_DOMAIN = "@healthtracker.local";
-const toEmail = u => u.trim().toLowerCase() + USER_DOMAIN;
-const toName = e => (e || "").replace(/@healthtracker\.local$/i, "");
-
 // Map the app's storage keys to Supabase table names
 const TABLE = {
   "appointments": "appointments",
@@ -81,6 +74,16 @@ const CAT_OMBRE = {
   Specialist:["#EBE3F9","#F6F2FC"], GP:["#DCF2E4","#F1FAF4"], "Annual Wellness":["#D6F0EC","#EFFAF8"],
 };
 const INS_TYPE_COLORS = { Medical:"#0E7490",Dental:"#0F766E",Vision:"#6D28D9",Life:"#334155",Disability:"#B45309",Other:"#52525B" };
+// Per-type accent colors + pastel ombres (for Reports subheaders)
+const TYPE_COLORS = {
+  "Acupuncture / TCM":"#B45309","Eye":"#0E7490","Cardiology":"#BE185D","Chiropractor":"#6D28D9",
+  "Dermatology":"#0F766E","Physical Therapy":"#1D4ED8","Therapy":"#7C6CC9","Others":"#52525B",
+};
+const TYPE_OMBRE = {
+  "Acupuncture / TCM":["#FBEBD6","#FCF7EF"],"Eye":["#D8F0F4","#F0FAFB"],"Cardiology":["#FBE0EC","#FCF0F6"],
+  "Chiropractor":["#EBE3F9","#F6F2FC"],"Dermatology":["#D6F0EC","#EFFAF8"],"Physical Therapy":["#DEE8FC","#F1F5FD"],
+  "Therapy":["#E7E2F7","#F4F1FB"],"Others":["#ECEAF2","#F5F4F8"],
+};
 
 // ─── Utils ──────────────────────────────────────────────────────────────────────
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
@@ -109,9 +112,51 @@ const Tag = ({label,color}) => (
     <Bar color={color}/>{label}
   </span>
 );
+// Category tag with a fixed-width bar column so labels align regardless of length
+const CatTag = ({label,color}) => (
+  <span style={{display:"inline-flex",alignItems:"center",fontSize:12.5,fontWeight:600,color:C.ink}}>
+    <span style={{display:"inline-flex",width:14,justifyContent:"flex-start",flexShrink:0}}><Bar color={color}/></span>
+    {label}
+  </span>
+);
 const StatusTag = ({label,color}) => (
   <span style={{display:"inline-flex",alignItems:"center",padding:"2px 9px",borderRadius:4,fontSize:11.5,fontWeight:600,color,background:color+"12",letterSpacing:0.2}}>{label}</span>
 );
+// Icon-based edit/delete menu — a pencil that opens a small popover
+function EditMenu({onEdit,onDelete}){
+  const [open,setOpen]=useState(false);
+  const ref=useRef(null);
+  useEffect(()=>{
+    if(!open)return;
+    const h=e=>{ if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener("mousedown",h);
+    return ()=>window.removeEventListener("mousedown",h);
+  },[open]);
+  return (
+    <div ref={ref} style={{position:"relative",display:"inline-block"}}>
+      <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);}} title="Edit or delete"
+        style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",borderRadius:6,color:C.faint,display:"flex",alignItems:"center",lineHeight:0}}
+        onMouseEnter={e=>{e.currentTarget.style.background=C.lineSoft;e.currentTarget.style.color=C.ink;}}
+        onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=C.faint;}}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      {open&&(
+        <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:C.surface,border:`1px solid ${C.line}`,borderRadius:8,boxShadow:"0 8px 24px rgba(31,27,46,0.12)",zIndex:100,overflow:"hidden",minWidth:120}}>
+          <button onClick={e=>{e.stopPropagation();setOpen(false);onEdit();}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 13px",background:"none",border:"none",cursor:"pointer",fontFamily:FONT,fontSize:13,color:C.ink,textAlign:"left"}}
+            onMouseEnter={e=>e.currentTarget.style.background=C.canvas} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            Edit
+          </button>
+          <button onClick={e=>{e.stopPropagation();setOpen(false);onDelete();}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 13px",background:"none",border:"none",borderTop:`1px solid ${C.lineSoft}`,cursor:"pointer",fontFamily:FONT,fontSize:13,color:C.due,textAlign:"left"}}
+            onMouseEnter={e=>e.currentTarget.style.background="#FEF2F2"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 const Field = ({label,required,hint,children}) => (
   <div style={{marginBottom:16}}>
     <label style={s.label}>{label}{required&&<span style={{color:C.due,marginLeft:3}}>*</span>}</label>
@@ -289,10 +334,10 @@ function RecordsTable({records,onEdit,onDelete}){
   return (
     <div style={{border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
       <div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",minWidth:880}}>
+        <table style={{width:"100%",borderCollapse:"collapse",minWidth:980}}>
           <thead>
             <tr style={{background:`linear-gradient(90deg, ${C.lavSoft} 0%, ${C.accentSoft} 45%, ${C.surface} 100%)`,borderBottom:`1px solid ${C.line}`}}>
-              {["Category","Type","Date","Clinic","Paid","To pay","Insurance","Next",""].map((h,i)=>(
+              {["Category","Type","Date","Clinic","Paid","To pay","Insurance","Next Appointment","Notes",""].map((h,i)=>(
                 <th key={i} style={{padding:"13px 14px",textAlign:i>=4&&i<=5?"right":"left",fontSize:10.5,fontWeight:700,color:C.sub,letterSpacing:0.7,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
               ))}
             </tr>
@@ -305,7 +350,7 @@ function RecordsTable({records,onEdit,onDelete}){
                 <tr key={r.id} style={{borderBottom:i<records.length-1?`1px solid ${C.lineSoft}`:"none",transition:"background .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.canvas}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <td style={{padding:"13px 14px",whiteSpace:"nowrap"}}>{r.category?<Tag label={r.category} color={cc}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"13px 14px",whiteSpace:"nowrap"}}>{r.category?<CatTag label={r.category} color={cc}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
                 <td style={{padding:"13px 14px",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.type||<span style={{color:C.faint}}>—</span>}</td>
                 <td style={{padding:"13px 14px",fontSize:13,color:C.ink,whiteSpace:"nowrap"}}>{r.date?fmtDate(r.date):<span style={{color:C.faint}}>—</span>}</td>
                 <td style={{padding:"13px 14px",maxWidth:170}}>
@@ -318,10 +363,10 @@ function RecordsTable({records,onEdit,onDelete}){
                 <td style={{padding:"13px 14px",fontSize:13,color:parseMoney(r.toPayAmount)>0?C.due:C.faint,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap",textAlign:"right"}}>{fmtMoney(r.toPayAmount)}</td>
                 <td style={{padding:"13px 14px",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
                 <td style={{padding:"13px 14px",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
+                <td style={{padding:"13px 14px",maxWidth:180}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
                 <td style={{padding:"13px 14px",whiteSpace:"nowrap"}}>
-                  <div style={{display:"flex",gap:2,justifyContent:"flex-end"}}>
-                    <button onClick={()=>onEdit(r)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.sub,fontFamily:FONT,padding:"4px 8px",borderRadius:5,fontWeight:500}} onMouseEnter={e=>e.currentTarget.style.background=C.lineSoft} onMouseLeave={e=>e.currentTarget.style.background="none"}>Edit</button>
-                    <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.faint,fontFamily:FONT,padding:"4px 8px",borderRadius:5}} onMouseEnter={e=>{e.currentTarget.style.background="#FEF2F2";e.currentTarget.style.color=C.due;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=C.faint;}}>Delete</button>
+                  <div style={{display:"flex",justifyContent:"flex-end"}}>
+                    <EditMenu onEdit={()=>onEdit(r)} onDelete={()=>onDelete(r.id)}/>
                   </div>
                 </td>
               </tr>
@@ -335,17 +380,74 @@ function RecordsTable({records,onEdit,onDelete}){
 }
 
 // ─── Appointments tab ───────────────────────────────────────────────────────────
+const APT_SORTS=[
+  {id:"date",label:"Date"},
+  {id:"paid",label:"Paid"},
+  {id:"toPay",label:"To pay"},
+  {id:"type",label:"Type"},
+  {id:"category",label:"Category"},
+];
+function sortRecords(list,sortBy,dir){
+  const s=[...list];
+  const m=dir==="asc"?1:-1;
+  s.sort((a,b)=>{
+    let av,bv;
+    switch(sortBy){
+      case "paid": av=parseMoney(a.paidAmount); bv=parseMoney(b.paidAmount); break;
+      case "toPay": av=parseMoney(a.toPayAmount); bv=parseMoney(b.toPayAmount); break;
+      case "type": av=(a.type||"").toLowerCase(); bv=(b.type||"").toLowerCase(); break;
+      case "category": av=(a.category||"").toLowerCase(); bv=(b.category||"").toLowerCase(); break;
+      default: av=a.date||""; bv=b.date||"";
+    }
+    if(av<bv)return -1*m; if(av>bv)return 1*m; return 0;
+  });
+  return s;
+}
+function SortBar({sortBy,setSortBy,dir,setDir}){
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:16}}>
+      <span style={{fontSize:11,fontWeight:700,color:C.faint,letterSpacing:0.6,textTransform:"uppercase",marginRight:2}}>Sort by</span>
+      {APT_SORTS.map(sopt=>{
+        const active=sortBy===sopt.id;
+        return (
+          <button key={sopt.id} onClick={()=>{ if(active){setDir(d=>d==="asc"?"desc":"asc");} else {setSortBy(sopt.id);setDir(sopt.id==="date"?"desc":"asc");} }}
+            style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,border:`1px solid ${active?"transparent":C.line}`,cursor:"pointer",fontSize:12.5,fontWeight:active?600:500,fontFamily:FONT,
+              background:active?C.ink:C.surface,color:active?"#fff":C.sub,transition:"all .12s"}}>
+            {sopt.label}{active&&<span style={{fontSize:10}}>{dir==="asc"?"▲":"▼"}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 function AppointmentsTab(){
   const [apts,setApts]=useState([]); const [loading,setLoading]=useState(true);
   const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
   const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fYear,setFYear]=useState(""); const [fMonth,setFMonth]=useState(""); const [fIns,setFIns]=useState("");
+  const [sortBy,setSortBy]=useState("date"); const [dir,setDir]=useState("desc");
   useEffect(()=>{store.get("appointments").then(d=>{if(d)setApts(d);setLoading(false);});},[]);
   const persist=async u=>{setApts(u);await store.set("appointments",u);};
   const handleSave=async a=>{const u=a.id&&apts.find(x=>x.id===a.id)?apts.map(x=>x.id===a.id?a:x):[...apts,a];await persist(u);setModal(null);};
   const confirmDelete=async()=>{await persist(apts.filter(a=>a.id!==confirm.id));setConfirm(null);};
   const hasF=fType||fYear||fMonth||fIns; const years=getYears(apts);
-  const rows=apts.filter(a=>fCat==="All"||a.category===fCat).filter(a=>!fType||a.type===fType).filter(a=>!fYear||a.date?.startsWith(fYear)).filter(a=>!fMonth||a.date?.slice(5,7)===fMonth).filter(a=>!fIns||a.insuranceStatus===fIns).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const today=new Date().toISOString().slice(0,10);
+  const filtered=apts.filter(a=>fCat==="All"||a.category===fCat).filter(a=>!fType||a.type===fType).filter(a=>!fYear||a.date?.startsWith(fYear)).filter(a=>!fMonth||a.date?.slice(5,7)===fMonth).filter(a=>!fIns||a.insuranceStatus===fIns);
+  const upcoming=sortRecords(filtered.filter(a=>(a.date||"")>=today),sortBy,dir);
+  const completed=sortRecords(filtered.filter(a=>(a.date||"")<today),sortBy,dir);
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
+  const Section=({title,rows,accent,ombre})=>(
+    <div style={{marginBottom:20,borderRadius:14,border:`1px solid ${C.line}`,padding:"18px 20px",
+      background:`linear-gradient(140deg, ${ombre[0]} 0%, ${ombre[1]} 40%, ${C.surface} 100%)`}}>
+      <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:14}}>
+        <Bar color={accent} height={16}/>
+        <span style={{fontSize:12.5,fontWeight:700,color:C.ink,letterSpacing:0.5,textTransform:"uppercase"}}>{title}</span>
+        <span style={{fontSize:11.5,fontWeight:600,color:accent,background:C.surface+"CC",borderRadius:20,padding:"1px 9px"}}>{rows.length}</span>
+      </div>
+      {rows.length===0
+        ?<div style={{fontSize:13,color:C.faint,padding:"6px 2px"}}>{title==="Upcoming appointments"?"Nothing upcoming.":"Nothing completed yet."}</div>
+        :<RecordsTable records={rows} onEdit={a=>setModal(a)} onDelete={id=>setConfirm({id,message:"Delete this appointment?"})}/>}
+    </div>
+  );
   return (
     <div>
       <div style={{marginBottom:16}}>
@@ -358,8 +460,10 @@ function AppointmentsTab(){
         <FilterSelect value={fMonth} onChange={setFMonth} options={MONTHS} placeholder="All months" minWidth={110}/>
         <FilterSelect value={fIns} onChange={setFIns} options={INS_STATUSES} placeholder="Insurance status" minWidth={140}/>
       </FilterBar>
-      {rows.length===0?<EmptyState>{apts.length===0?"No appointments yet. Add your first one.":"No appointments match these filters."}</EmptyState>
-        :<RecordsTable records={rows} onEdit={a=>setModal(a)} onDelete={id=>setConfirm({id,message:"Delete this appointment?"})}/>}
+      <SortBar sortBy={sortBy} setSortBy={setSortBy} dir={dir} setDir={setDir}/>
+      {filtered.length===0
+        ?<EmptyState>{apts.length===0?"No appointments yet. Add your first one.":"No appointments match these filters."}</EmptyState>
+        :<><Section title="Upcoming appointments" rows={upcoming} accent={C.accent} ombre={["#D6F0EC","#EBF7F4"]}/><Section title="Completed appointments" rows={completed} accent={C.lav} ombre={["#E7E2F7","#F2EFF9"]}/></>}
       {modal&&<AppointmentModal appt={modal==="new"?null:modal} onSave={handleSave} onClose={()=>setModal(null)}/>}
       {confirm&&<ConfirmModal message={confirm.message} onConfirm={confirmDelete} onCancel={()=>setConfirm(null)}/>}
     </div>
@@ -411,8 +515,7 @@ function InsuranceCard({card,onEdit,onDelete}){
           {card.planName&&<div style={{fontSize:12.5,color:C.faint,marginTop:2}}>{card.planName}</div>}
         </div>
         <div style={{display:"flex",gap:2}}>
-          <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.sub,fontFamily:FONT,padding:"4px 8px",borderRadius:5,fontWeight:500}}>Edit</button>
-          <button onClick={onDelete} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.faint,fontFamily:FONT,padding:"4px 8px",borderRadius:5}}>Delete</button>
+          <EditMenu onEdit={onEdit} onDelete={onDelete}/>
         </div>
       </div>
       <div style={{padding:"6px 18px 14px"}}>
@@ -484,9 +587,8 @@ function ClinicRow({clinic,color,last,onEdit,onDelete}){
       <div style={{fontSize:13,color:C.sub,minWidth:0,display:"flex",alignItems:"center",gap:6}}>
         {clinic.location?<><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.location}</span><a href={mapsUrl(clinic.location)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a></>:<span style={{color:C.faint}}>—</span>}
       </div>
-      <div style={{display:"flex",gap:2,flexShrink:0,justifyContent:"flex-end"}}>
-        <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.sub,fontFamily:FONT,padding:"4px 8px",borderRadius:5,fontWeight:500}}>Edit</button>
-        <button onClick={onDelete} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.faint,fontFamily:FONT,padding:"4px 8px",borderRadius:5}}>Delete</button>
+      <div style={{display:"flex",flexShrink:0,justifyContent:"flex-end"}}>
+        <EditMenu onEdit={onEdit} onDelete={onDelete}/>
       </div>
     </div>
   );
@@ -589,9 +691,8 @@ function ReportCard({report,onEdit,onDelete}){
               {report.date&&<span style={{fontSize:12.5,color:C.faint}}>{fmtDate(report.date)}</span>}
             </div>
           </div>
-          <div style={{display:"flex",gap:2,flexShrink:0}}>
-            <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.sub,fontFamily:FONT,padding:"4px 8px",borderRadius:5,fontWeight:500}}>Edit</button>
-            <button onClick={onDelete} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.faint,fontFamily:FONT,padding:"4px 8px",borderRadius:5}}>Delete</button>
+          <div style={{flexShrink:0}}>
+            <EditMenu onEdit={onEdit} onDelete={onDelete}/>
           </div>
         </div>
         {report.notes&&<div style={{fontSize:13,color:C.sub,marginTop:10,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{report.notes}</div>}
@@ -609,13 +710,35 @@ function ReportCard({report,onEdit,onDelete}){
 function ReportsTab(){
   const [reports,setReports]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
   const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fYear,setFYear]=useState(""); const [fMonth,setFMonth]=useState("");
+  const [collapsed,setCollapsed]=useState({});
+  const toggle=t=>setCollapsed(p=>({...p,[t]:!p[t]}));
   useEffect(()=>{store.get("reports").then(d=>{if(d)setReports(d);setLoading(false);});},[]);
   const persist=async u=>{setReports(u);await store.set("reports",u);};
   const handleSave=async r=>{const u=r.id&&reports.find(x=>x.id===r.id)?reports.map(x=>x.id===r.id?r:x):[...reports,r];await persist(u);setModal(null);};
   const confirmDelete=async()=>{await persist(reports.filter(r=>r.id!==confirm.id));setConfirm(null);};
   const hasF=fType||fYear||fMonth; const years=getYears(reports);
-  const rows=reports.filter(r=>fCat==="All"||r.category===fCat).filter(r=>!fType||r.type===fType).filter(r=>!fYear||r.date?.startsWith(fYear)).filter(r=>!fMonth||r.date?.slice(5,7)===fMonth).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const filtered=reports.filter(r=>fCat==="All"||r.category===fCat).filter(r=>!fType||r.type===fType).filter(r=>!fYear||r.date?.startsWith(fYear)).filter(r=>!fMonth||r.date?.slice(5,7)===fMonth);
+  const anyResult=filtered.length>0;
+  // group by type, preserving TYPES order, plus an "Uncategorized" bucket
+  const grouped=TYPES.reduce((a,t)=>{a[t]=filtered.filter(r=>r.type===t).sort((x,y)=>(y.date||"").localeCompare(x.date||""));return a;},{});
+  const untyped=filtered.filter(r=>!r.type||!TYPES.includes(r.type)).sort((x,y)=>(y.date||"").localeCompare(x.date||""));
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
+  const TypeGroup=({type,color,ombre,items})=>items.length>0&&(
+    <div style={{marginBottom:16,border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
+      <div onClick={()=>toggle(type)} style={{display:"flex",alignItems:"center",gap:11,padding:"13px 16px",cursor:"pointer",userSelect:"none",
+        background:`linear-gradient(90deg, ${ombre[0]} 0%, ${ombre[1]} 60%, ${C.surface} 100%)`,borderBottom:collapsed[type]?"none":`1px solid ${C.lineSoft}`}}>
+        <span style={{display:"inline-flex",transition:"transform .15s",transform:collapsed[type]?"rotate(-90deg)":"rotate(0deg)",color:C.sub,fontSize:11}}>▾</span>
+        <Bar color={color} height={16}/>
+        <span style={{fontSize:12.5,fontWeight:700,color:C.ink,letterSpacing:0.5,textTransform:"uppercase"}}>{type}</span>
+        <span style={{fontSize:11.5,fontWeight:600,color,background:C.surface+"CC",borderRadius:20,padding:"1px 9px"}}>{items.length}</span>
+      </div>
+      {!collapsed[type]&&(
+        <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:12}}>
+          {items.map(r=><ReportCard key={r.id} report={r} onEdit={()=>setModal(r)} onDelete={()=>setConfirm({id:r.id,message:"Delete this report?"})}/>)}
+        </div>
+      )}
+    </div>
+  );
   return (
     <div>
       <div style={{marginBottom:16}}>
@@ -627,8 +750,12 @@ function ReportsTab(){
         <FilterSelect value={fYear} onChange={setFYear} options={years} placeholder="All years" minWidth={90}/>
         <FilterSelect value={fMonth} onChange={setFMonth} options={MONTHS} placeholder="All months" minWidth={110}/>
       </FilterBar>
-      {rows.length===0?<EmptyState>{reports.length===0?"No reports yet. Upload your first medical report.":"No reports match these filters."}</EmptyState>
-        :<div style={{display:"flex",flexDirection:"column",gap:12}}>{rows.map(r=><ReportCard key={r.id} report={r} onEdit={()=>setModal(r)} onDelete={()=>setConfirm({id:r.id,message:"Delete this report?"})}/>)}</div>}
+      {reports.length===0?<EmptyState>No reports yet. Upload your first medical report.</EmptyState>
+        :!anyResult?<EmptyState>No reports match these filters.</EmptyState>
+        :<div>
+          {TYPES.map(t=><TypeGroup key={t} type={t} color={TYPE_COLORS[t]} ombre={TYPE_OMBRE[t]} items={grouped[t]}/>)}
+          <TypeGroup type="Uncategorized" color={C.faint} ombre={["#ECEAF2","#F5F4F8"]} items={untyped}/>
+        </div>}
       {modal&&<ReportModal report={modal==="new"?null:modal} onSave={handleSave} onClose={()=>setModal(null)}/>}
       {confirm&&<ConfirmModal message={confirm.message} onConfirm={confirmDelete} onCancel={()=>setConfirm(null)}/>}
     </div>
@@ -649,13 +776,18 @@ function DashboardTab(){
   const byCat=CATEGORIES.map(c=>({cat:c,n:thisYear.filter(a=>a.category===c).length}));
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
 
-  // Visits split by category — one row
-  const VisitCell=({cat,n})=>(
-    <div style={{flex:1,minWidth:96,padding:"0 4px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}><Bar color={CAT_COLORS[cat]} height={12}/><span style={{fontSize:11,color:C.faint,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase"}}>{cat}</span></div>
-      <div style={{fontSize:32,fontWeight:600,color:C.ink,letterSpacing:-1,lineHeight:1}}>{n}</div>
-    </div>
-  );
+  // Visits split by category — pastel ombre boxes
+  const VisitCell=({cat,n})=>{
+    const omb=CAT_OMBRE[cat]||["#ECEAF2","#F5F4F8"];
+    return (
+      <div style={{flex:"1 1 150px",minWidth:140,borderRadius:12,border:`1px solid ${C.line}`,padding:"16px 16px 18px",
+        background:`linear-gradient(140deg, ${omb[0]} 0%, ${omb[1]} 55%, ${C.surface} 100%)`}}>
+        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:10}}><Bar color={CAT_COLORS[cat]} height={13}/><span style={{fontSize:11,color:C.sub,fontWeight:700,letterSpacing:0.3,textTransform:"uppercase"}}>{cat}</span></div>
+        <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:-1,lineHeight:1}}>{n}</div>
+        <div style={{fontSize:11,color:C.faint,marginTop:4}}>{n===1?"visit":"visits"}</div>
+      </div>
+    );
+  };
   // Money / status — one row
   const MoneyCell=({label,value,color})=>(
     <div style={{flex:1,minWidth:130,padding:"0 4px"}}>
@@ -668,13 +800,15 @@ function DashboardTab(){
     <div>
       <div style={{fontSize:12.5,color:C.faint,marginBottom:22}}>Year in review · <span style={{color:C.lav,fontWeight:700}}>{year}</span></div>
 
-      {/* Row 1 — visits by category */}
+      {/* Row 1 — visits by category as pastel boxes */}
       <SectionHead>Visits this year</SectionHead>
-      <div style={{display:"flex",flexWrap:"wrap",gap:"20px 0",paddingBottom:26,marginBottom:26,borderBottom:`1px solid ${C.line}`}}>
+      <div style={{display:"flex",flexWrap:"wrap",gap:12,paddingBottom:26,marginBottom:26,borderBottom:`1px solid ${C.line}`}}>
         {byCat.map(({cat,n})=><VisitCell key={cat} cat={cat} n={n}/>)}
-        <div style={{flex:1,minWidth:96,padding:"0 4px",borderLeft:`2px solid ${C.lav}`}}>
-          <div style={{fontSize:11,color:C.lav,fontWeight:700,letterSpacing:0.3,textTransform:"uppercase",marginBottom:8}}>Total</div>
+        <div style={{flex:"1 1 150px",minWidth:140,borderRadius:12,border:`1px solid ${C.lav}44`,padding:"16px 16px 18px",
+          background:`linear-gradient(140deg, #E7E2F7 0%, #F4F1FB 55%, ${C.surface} 100%)`}}>
+          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:10}}><Bar color={C.lav} height={13}/><span style={{fontSize:11,color:C.lav,fontWeight:700,letterSpacing:0.3,textTransform:"uppercase"}}>Total</span></div>
           <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:-1,lineHeight:1}}>{visits}</div>
+          <div style={{fontSize:11,color:C.faint,marginTop:4}}>{visits===1?"visit":"visits"}</div>
         </div>
       </div>
 
@@ -686,24 +820,24 @@ function DashboardTab(){
       </div>
 
       {/* Lists */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:40}}>
-        <div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+        <div style={{borderRadius:14,border:`1px solid ${C.line}`,padding:"18px 20px",background:`linear-gradient(140deg, #FBEBD6 0%, #FCF5EC 45%, ${C.surface} 100%)`}}>
           <SectionHead>Pending insurance claims</SectionHead>
           {pending.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing pending.</p>
             :pending.map((a,i)=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 0",borderBottom:i<pending.length-1?`1px solid ${C.lineSoft}`:"none"}}>
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 0",borderBottom:i<pending.length-1?`1px solid ${C.line}66`:"none"}}>
                 <Bar color={CAT_COLORS[a.category]||C.faint} height={28}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>{a.category||"—"}{a.type?` · ${a.type}`:""}</div><div style={{fontSize:12,color:C.faint}}>{fmtDate(a.date)}{a.clinic?` · ${a.clinic}`:""}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>{a.category||"—"}{a.type?` · ${a.type}`:""}</div><div style={{fontSize:12,color:C.sub}}>{fmtDate(a.date)}{a.clinic?` · ${a.clinic}`:""}</div></div>
               </div>
             ))}
         </div>
-        <div>
+        <div style={{borderRadius:14,border:`1px solid ${C.line}`,padding:"18px 20px",background:`linear-gradient(140deg, #D6F0EC 0%, #EBF7F4 45%, ${C.surface} 100%)`}}>
           <SectionHead>Upcoming appointments</SectionHead>
           {upcoming.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing scheduled.</p>
             :upcoming.map((a,i)=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 0",borderBottom:i<upcoming.length-1?`1px solid ${C.lineSoft}`:"none"}}>
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 0",borderBottom:i<upcoming.length-1?`1px solid ${C.line}66`:"none"}}>
                 <Bar color={CAT_COLORS[a.category]||C.faint} height={28}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>{a.category||"—"}{a.type?` · ${a.type}`:""}</div><div style={{fontSize:12,color:C.faint}}>{a.clinic||""}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>{a.category||"—"}{a.type?` · ${a.type}`:""}</div><div style={{fontSize:12,color:C.sub}}>{a.clinic||""}</div></div>
                 <span style={{fontSize:12.5,color:C.sub,fontWeight:600,flexShrink:0}}>{fmtShort(a.date)}</span>
               </div>
             ))}
@@ -720,28 +854,23 @@ function LoginPage({onLogin}){
   const [err,setErr]=useState(""); const [loading,setLoading]=useState(false);
   const reset=()=>{setErr("");setPassword("");setConfirm("");};
 const doLogin = async () => {
-  if (!username.trim() || !password) { setErr("Enter your username and password."); return; }
+  if (!username.trim() || !password) { setErr("Enter your email and password."); return; }
   setLoading(true); setErr("");
   const { error } = await supabase.auth.signInWithPassword({
-    email: toEmail(username), password,
+    email: username.trim(), password,
   });
-  if (error) { setErr("Incorrect username or password."); setLoading(false); return; }
+  if (error) { setErr(error.message); setLoading(false); return; }
   onLogin(username.trim());
 };
 const doSignup = async () => {
   if (!username.trim() || !password) { setErr("Fill in all fields."); return; }
-  if (username.trim().length < 3) { setErr("Username must be at least 3 characters."); return; }
-  if (/[^a-zA-Z0-9._-]/.test(username.trim())) { setErr("Username can only use letters, numbers, and . _ -"); return; }
   if (password.length < 6) { setErr("Password must be at least 6 characters."); return; }
   if (password !== confirm) { setErr("Passwords do not match."); return; }
   setLoading(true); setErr("");
   const { error } = await supabase.auth.signUp({
-    email: toEmail(username), password,
+    email: username.trim(), password,
   });
-  if (error) {
-    setErr(/registered|exists/i.test(error.message) ? "That username is already taken." : error.message);
-    setLoading(false); return;
-  }
+  if (error) { setErr(error.message); setLoading(false); return; }
   onLogin(username.trim());
 };
   const go=mode==="login"?doLogin:doSignup;
@@ -761,7 +890,7 @@ const doSignup = async () => {
         {err&&<div style={{background:"#FEF2F2",borderRadius:6,padding:"10px 13px",marginBottom:16,fontSize:13,color:C.due}}>{err}</div>}
         <div style={{marginBottom:14}}>
           <label style={s.label}>Username</label>
-          <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Choose a username" style={s.input} onKeyDown={e=>e.key==="Enter"&&go()}/>
+          <SI value={username} onChange={setUsername} placeholder="Enter username"/>
         </div>
         <div style={{marginBottom:mode==="signup"?14:22}}>
           <label style={s.label}>Password</label>
@@ -773,77 +902,6 @@ const doSignup = async () => {
         </div>}
         <button onClick={go} disabled={loading} style={{...s.btn("primary"),width:"100%",padding:"11px",opacity:loading?0.7:1,cursor:loading?"not-allowed":"pointer"}}>{loading?"Please wait":mode==="login"?"Sign in":"Create account"}</button>
         {mode==="signup"&&<p style={{margin:"14px 0 0",fontSize:12,color:C.faint,textAlign:"center"}}>Your data is private and tied to your account.</p>}
-      </div>
-    </div>
-  );
-}
-
-// ─── Settings tab ───────────────────────────────────────────────────────────────
-function SettingsTab({user}){
-  const currentName = toName(user);
-  const [newName,setNewName]=useState("");
-  const [nameMsg,setNameMsg]=useState(null); // {type:"ok"|"err", text}
-  const [nameBusy,setNameBusy]=useState(false);
-
-  const [pw,setPw]=useState(""); const [pw2,setPw2]=useState("");
-  const [pwMsg,setPwMsg]=useState(null);
-  const [pwBusy,setPwBusy]=useState(false);
-
-  const changeName=async()=>{
-    setNameMsg(null);
-    const n=newName.trim();
-    if(!n){setNameMsg({type:"err",text:"Enter a new username."});return;}
-    if(n.length<3){setNameMsg({type:"err",text:"Username must be at least 3 characters."});return;}
-    if(/[^a-zA-Z0-9._-]/.test(n)){setNameMsg({type:"err",text:"Username can only use letters, numbers, and . _ -"});return;}
-    if(n.toLowerCase()===currentName.toLowerCase()){setNameMsg({type:"err",text:"That's already your username."});return;}
-    setNameBusy(true);
-    const { error } = await supabase.auth.updateUser({ email: toEmail(n) });
-    setNameBusy(false);
-    if(error){ setNameMsg({type:"err",text:/registered|exists/i.test(error.message)?"That username is already taken.":error.message}); return; }
-    setNameMsg({type:"ok",text:`Username changed to "${n}". Use it next time you sign in.`});
-    setNewName("");
-  };
-
-  const changePassword=async()=>{
-    setPwMsg(null);
-    if(!pw||pw.length<6){setPwMsg({type:"err",text:"Password must be at least 6 characters."});return;}
-    if(pw!==pw2){setPwMsg({type:"err",text:"Passwords do not match."});return;}
-    setPwBusy(true);
-    const { error } = await supabase.auth.updateUser({ password: pw });
-    setPwBusy(false);
-    if(error){ setPwMsg({type:"err",text:error.message}); return; }
-    setPwMsg({type:"ok",text:"Password updated successfully."});
-    setPw(""); setPw2("");
-  };
-
-  const Note=({msg})=>msg?(
-    <div style={{background:msg.type==="ok"?C.accentSoft:"#FEF2F2",border:`1px solid ${msg.type==="ok"?C.accent+"33":"#FECACA"}`,borderRadius:8,padding:"10px 13px",marginTop:12,fontSize:13,color:msg.type==="ok"?C.ink:C.due,lineHeight:1.5}}>{msg.text}</div>
-  ):null;
-
-  const card={background:C.surface,border:`1px solid ${C.line}`,borderRadius:12,padding:24,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"};
-
-  return (
-    <div style={{maxWidth:520}}>
-      <div style={{fontSize:12.5,color:C.faint,marginBottom:22}}>Signed in as <span style={{color:C.ink,fontWeight:600}}>{currentName}</span></div>
-
-      {/* Change username */}
-      <div style={{...card,marginBottom:20}}>
-        <SectionHead>Change username</SectionHead>
-        <p style={{fontSize:13,color:C.sub,margin:"0 0 16px",lineHeight:1.5}}>Pick a new username. It takes effect right away — use it the next time you sign in.</p>
-        <Field label="Current username"><input value={currentName} disabled style={{...s.input,background:C.lineSoft,color:C.faint,cursor:"not-allowed"}}/></Field>
-        <Field label="New username" hint="Letters, numbers, and . _ - only"><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="new username" style={s.input}/></Field>
-        <button onClick={changeName} disabled={nameBusy} style={{...s.btn("primary"),opacity:nameBusy?0.7:1,cursor:nameBusy?"not-allowed":"pointer"}}>{nameBusy?"Saving…":"Change username"}</button>
-        <Note msg={nameMsg}/>
-      </div>
-
-      {/* Reset password */}
-      <div style={card}>
-        <SectionHead>Reset password</SectionHead>
-        <p style={{fontSize:13,color:C.sub,margin:"0 0 16px",lineHeight:1.5}}>Set a new password for your account. You'll stay signed in on this device.</p>
-        <Field label="New password"><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="At least 6 characters" style={s.input}/></Field>
-        <Field label="Confirm new password"><input type="password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="Re-enter new password" style={s.input}/></Field>
-        <button onClick={changePassword} disabled={pwBusy} style={{...s.btn("primary"),opacity:pwBusy?0.7:1,cursor:pwBusy?"not-allowed":"pointer"}}>{pwBusy?"Updating…":"Update password"}</button>
-        <Note msg={pwMsg}/>
       </div>
     </div>
   );
@@ -870,13 +928,13 @@ export default function App(){
   return (
     <div style={{minHeight:"100vh",background:C.canvas,fontFamily:FONT,color:C.ink}}>
       {/* Top bar */}
-      <div style={{borderBottom:`1px solid ${C.line}`,background:C.surface}}>
+      <div style={{borderBottom:`1px solid ${C.line}`,background:`linear-gradient(90deg, #E7E2F7 0%, #EFEAF9 40%, #F6F3FB 100%)`}}>
         <div style={{maxWidth:1040,margin:"0 auto",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:16,fontWeight:800,letterSpacing:-0.3,color:C.ink}}>Healthcare Tracker</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <button onClick={()=>setTab("settings")} style={{fontSize:13,color:tab==="settings"?C.ink:C.faint,background:"none",border:"none",cursor:"pointer",fontFamily:FONT,fontWeight:500,padding:0}}>{toName(user)}</button>
+            <span style={{fontSize:13,color:C.faint}}>{user}</span>
             <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${C.line}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:12.5,fontFamily:FONT,fontWeight:500}}>Sign out</button>
           </div>
         </div>
@@ -888,10 +946,6 @@ export default function App(){
             <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"13px 4px",marginRight:18,border:"none",background:"none",cursor:"pointer",fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,
               color:active?C.ink:C.faint,borderBottom:`2px solid ${active?C.accent:"transparent"}`,whiteSpace:"nowrap",transition:"color .12s"}}>{t.label}</button>
           );})}
-          {(()=>{const active=tab==="settings";return(
-            <button onClick={()=>setTab("settings")} style={{padding:"13px 4px",marginRight:18,marginLeft:"auto",border:"none",background:"none",cursor:"pointer",fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,
-              color:active?C.ink:C.faint,borderBottom:`2px solid ${active?C.accent:"transparent"}`,whiteSpace:"nowrap",transition:"color .12s"}}>Settings</button>
-          );})()}
         </div>
       </div>
       {/* Content */}
@@ -901,7 +955,6 @@ export default function App(){
         {tab==="reports"&&<ReportsTab/>}
         {tab==="insurance"&&<InsuranceTab/>}
         {tab==="clinics"&&<ClinicsTab/>}
-        {tab==="settings"&&<SettingsTab user={user}/>}
       </div>
     </div>
   );
