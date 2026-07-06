@@ -326,6 +326,7 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
 
 // ─── Records table ──────────────────────────────────────────────────────────────
 const RT_COLS=[
+  {key:"menu",label:"",sort:null},
   {key:"category",label:"Category",sort:"category"},
   {key:"type",label:"Type",sort:"type"},
   {key:"date",label:"Date",sort:"date"},
@@ -335,7 +336,6 @@ const RT_COLS=[
   {key:"insurance",label:"Insurance",sort:"insurance"},
   {key:"next",label:"Next Appointment",sort:"next"},
   {key:"notes",label:"Notes",sort:null},
-  {key:"menu",label:"",sort:null},
 ];
 function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
   return (
@@ -364,6 +364,11 @@ function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
                 <tr key={r.id} style={{borderBottom:i<records.length-1?`1px solid ${C.lineSoft}`:"none",transition:"background .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.canvas}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>
+                  <div style={{display:"flex",justifyContent:"flex-start"}}>
+                    <EditMenu onEdit={()=>onEdit(r)} onDelete={()=>onDelete(r.id)}/>
+                  </div>
+                </td>
                 <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>{r.category?<CatTag label={r.category} color={cc}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,fontWeight:r.type?600:400,color:r.type?(TYPE_COLORS[r.type]||C.sub):C.faint,whiteSpace:"nowrap"}}>{r.type||"—"}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,whiteSpace:"nowrap"}}>{r.date?fmtDate(r.date):<span style={{color:C.faint}}>—</span>}</td>
@@ -378,11 +383,6 @@ function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
                 <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",maxWidth:180}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
-                <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>
-                  <div style={{display:"flex",justifyContent:"flex-end"}}>
-                    <EditMenu onEdit={()=>onEdit(r)} onDelete={()=>onDelete(r.id)}/>
-                  </div>
-                </td>
               </tr>
             );
           })}
@@ -811,9 +811,9 @@ function DashboardTab({onOpenAppt}){
               <tbody>
                 {pending.map((a,i)=>(
                   <tr key={a.id} style={{borderTop:`1px solid ${C.lineSoft}`}}>
-                    <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}</td>
-                    <td style={{...miniTd,color:C.sub}}>{a.type||"—"}</td>
-                    <td style={{...miniTd,color:C.sub,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis"}}>{a.clinic||"—"}</td>
+                    <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.category||"—"}</td>
+                    <td style={{...miniTd,color:C.sub,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.type||"—"}</td>
+                    <td style={{...miniTd,color:C.sub,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis"}}>{a.clinic||"—"}</td>
                     <td style={{...miniTd,color:C.sub}}>{fmtShort(a.date)}</td>
                     <td style={{...miniTd}}>{fmtMoney(a.toPayAmount)}</td>
                     <td style={{...miniTd,paddingRight:0}}><button onClick={()=>onOpenAppt&&onOpenAppt(a.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:12,fontWeight:600,fontFamily:FONT,padding:0}}>View →</button></td>
@@ -831,9 +831,14 @@ function DashboardTab({onOpenAppt}){
               <tbody>
                 {upcoming.map((a,i)=>(
                   <tr key={a.id} style={{borderTop:`1px solid ${C.lineSoft}`}}>
-                    <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}</td>
-                    <td style={{...miniTd,color:C.sub}}>{a.type||"—"}</td>
-                    <td style={{...miniTd,color:C.sub,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis"}}>{a.clinic||"—"}</td>
+                    <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.category||"—"}</td>
+                    <td style={{...miniTd,color:C.sub,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.type||"—"}</td>
+                    <td style={{...miniTd,color:C.sub,maxWidth:130}}>
+                      {a.clinic?<span style={{display:"inline-flex",alignItems:"center",gap:6,maxWidth:130}}>
+                        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.clinic}</span>
+                        <a href={mapsUrl(a.clinic)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a>
+                      </span>:"—"}
+                    </td>
                     <td style={{...miniTd,color:C.sub}}>{fmtShort(a.date)}</td>
                   </tr>
                 ))}
