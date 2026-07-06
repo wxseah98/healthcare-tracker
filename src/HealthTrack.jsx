@@ -63,7 +63,7 @@ const INS_TYPES = ["Medical","Dental","Vision","Life","Disability","Other"];
 const C = {
   canvas:"#F3F1F7", surface:"#FFFFFF", ink:"#1F1B2E", sub:"#5B5570", faint:"#9B94AD",
   line:"#E4E0EC", lineSoft:"#EEEBF3", accent:"#0F766E", accentSoft:"#0F766E14",
-  lav:"#7C6CC9", lavSoft:"#7C6CC914",
+  lav:"#7C6CC9", lavSoft:"#7C6CC914", blue:"#2563EB",
   paid:"#15803D", due:"#B91C1C", pending:"#B45309",
 };
 // Desaturated category tints
@@ -108,16 +108,11 @@ const s = {
 const Dot = ({color,size=6}) => <span style={{display:"inline-block",width:size,height:size,borderRadius:"50%",background:color,flexShrink:0}}/>;
 const Bar = ({color,height=14}) => <span style={{display:"inline-block",width:3,height,borderRadius:2,background:color,flexShrink:0}}/>;
 const Tag = ({label,color}) => (
-  <span style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12.5,fontWeight:600,color:C.ink}}>
-    <Bar color={color}/>{label}
-  </span>
+  <span style={{fontSize:12.5,fontWeight:700,color}}>{label}</span>
 );
-// Category tag with a fixed-width bar column so labels align regardless of length
+// Category label as colored text (no bar) so all labels align on the left
 const CatTag = ({label,color}) => (
-  <span style={{display:"inline-flex",alignItems:"center",fontSize:12.5,fontWeight:600,color:C.ink}}>
-    <span style={{display:"inline-flex",width:14,justifyContent:"flex-start",flexShrink:0}}><Bar color={color}/></span>
-    {label}
-  </span>
+  <span style={{fontSize:12.5,fontWeight:700,color}}>{label}</span>
 );
 const StatusTag = ({label,color}) => (
   <span style={{display:"inline-flex",alignItems:"center",padding:"2px 9px",borderRadius:4,fontSize:11.5,fontWeight:600,color,background:color+"12",letterSpacing:0.2}}>{label}</span>
@@ -332,13 +327,13 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
 // ─── Records table ──────────────────────────────────────────────────────────────
 function RecordsTable({records,onEdit,onDelete}){
   return (
-    <div style={{border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
-      <div style={{overflowX:"auto"}}>
+    <div style={{border:`1px solid ${C.line}`,borderRadius:10,overflow:"visible",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
+      <div style={{overflowX:"auto",borderRadius:10}}>
         <table style={{width:"100%",borderCollapse:"collapse",minWidth:980}}>
           <thead>
             <tr style={{background:`linear-gradient(90deg, ${C.lavSoft} 0%, ${C.accentSoft} 45%, ${C.surface} 100%)`,borderBottom:`1px solid ${C.line}`}}>
               {["Category","Type","Date","Clinic","Paid","To pay","Insurance","Next Appointment","Notes",""].map((h,i)=>(
-                <th key={i} style={{padding:"13px 14px",textAlign:i>=4&&i<=5?"right":"left",fontSize:10.5,fontWeight:700,color:C.sub,letterSpacing:0.7,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                <th key={i} style={{padding:"8px 12px",textAlign:i>=4&&i<=5?"right":"left",fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -350,21 +345,21 @@ function RecordsTable({records,onEdit,onDelete}){
                 <tr key={r.id} style={{borderBottom:i<records.length-1?`1px solid ${C.lineSoft}`:"none",transition:"background .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.canvas}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <td style={{padding:"13px 14px",whiteSpace:"nowrap"}}>{r.category?<CatTag label={r.category} color={cc}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
-                <td style={{padding:"13px 14px",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.type||<span style={{color:C.faint}}>—</span>}</td>
-                <td style={{padding:"13px 14px",fontSize:13,color:C.ink,whiteSpace:"nowrap"}}>{r.date?fmtDate(r.date):<span style={{color:C.faint}}>—</span>}</td>
-                <td style={{padding:"13px 14px",maxWidth:170}}>
+                <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>{r.category?<CatTag label={r.category} color={cc}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"9px 12px",fontSize:13,fontWeight:r.type?600:400,color:r.type?(TYPE_COLORS[r.type]||C.sub):C.faint,whiteSpace:"nowrap"}}>{r.type||"—"}</td>
+                <td style={{padding:"9px 12px",fontSize:13,color:C.ink,whiteSpace:"nowrap"}}>{r.date?fmtDate(r.date):<span style={{color:C.faint}}>—</span>}</td>
+                <td style={{padding:"9px 12px",maxWidth:170}}>
                   {r.clinic?<div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:C.sub}}>
                     <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.clinic}</span>
                     <a href={mapsUrl(r.clinic)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a>
                   </div>:<span style={{color:C.faint,fontSize:13}}>—</span>}
                 </td>
-                <td style={{padding:"13px 14px",fontSize:13,color:parseMoney(r.paidAmount)>0?C.paid:C.faint,fontWeight:parseMoney(r.paidAmount)>0?600:400,whiteSpace:"nowrap",textAlign:"right"}}>{fmtMoney(r.paidAmount)}</td>
-                <td style={{padding:"13px 14px",fontSize:13,color:parseMoney(r.toPayAmount)>0?C.due:C.faint,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap",textAlign:"right"}}>{fmtMoney(r.toPayAmount)}</td>
-                <td style={{padding:"13px 14px",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
-                <td style={{padding:"13px 14px",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
-                <td style={{padding:"13px 14px",maxWidth:180}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
-                <td style={{padding:"13px 14px",whiteSpace:"nowrap"}}>
+                <td style={{padding:"9px 12px",fontSize:13,color:parseMoney(r.paidAmount)>0?C.paid:C.faint,fontWeight:parseMoney(r.paidAmount)>0?600:400,whiteSpace:"nowrap",textAlign:"right"}}>{fmtMoney(r.paidAmount)}</td>
+                <td style={{padding:"9px 12px",fontSize:13,color:parseMoney(r.toPayAmount)>0?C.due:C.faint,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap",textAlign:"right"}}>{fmtMoney(r.toPayAmount)}</td>
+                <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"9px 12px",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
+                <td style={{padding:"9px 12px",maxWidth:180}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>
                   <div style={{display:"flex",justifyContent:"flex-end"}}>
                     <EditMenu onEdit={()=>onEdit(r)} onDelete={()=>onDelete(r.id)}/>
                   </div>
@@ -436,15 +431,14 @@ function AppointmentsTab(){
   const completed=sortRecords(filtered.filter(a=>(a.date||"")<today),sortBy,dir);
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
   const Section=({title,rows,accent,ombre})=>(
-    <div style={{marginBottom:20,borderRadius:14,border:`1px solid ${C.line}`,padding:"18px 20px",
+    <div style={{marginBottom:16,borderRadius:12,border:`1px solid ${C.line}`,padding:"12px 14px",
       background:`linear-gradient(140deg, ${ombre[0]} 0%, ${ombre[1]} 40%, ${C.surface} 100%)`}}>
-      <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:14}}>
-        <Bar color={accent} height={16}/>
-        <span style={{fontSize:12.5,fontWeight:700,color:C.ink,letterSpacing:0.5,textTransform:"uppercase"}}>{title}</span>
-        <span style={{fontSize:11.5,fontWeight:600,color:accent,background:C.surface+"CC",borderRadius:20,padding:"1px 9px"}}>{rows.length}</span>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:11.5,fontWeight:700,color:accent,letterSpacing:0.4,textTransform:"uppercase"}}>{title}</span>
+        <span style={{fontSize:11,fontWeight:600,color:accent,background:C.surface+"CC",borderRadius:20,padding:"1px 8px"}}>{rows.length}</span>
       </div>
       {rows.length===0
-        ?<div style={{fontSize:13,color:C.faint,padding:"6px 2px"}}>{title==="Upcoming appointments"?"Nothing upcoming.":"Nothing completed yet."}</div>
+        ?<div style={{fontSize:13,color:C.faint,padding:"4px 2px"}}>{title==="Upcoming appointments"?"Nothing upcoming.":"Nothing completed yet."}</div>
         :<RecordsTable records={rows} onEdit={a=>setModal(a)} onDelete={id=>setConfirm({id,message:"Delete this appointment?"})}/>}
     </div>
   );
@@ -463,7 +457,7 @@ function AppointmentsTab(){
       <SortBar sortBy={sortBy} setSortBy={setSortBy} dir={dir} setDir={setDir}/>
       {filtered.length===0
         ?<EmptyState>{apts.length===0?"No appointments yet. Add your first one.":"No appointments match these filters."}</EmptyState>
-        :<><Section title="Upcoming appointments" rows={upcoming} accent={C.accent} ombre={["#D6F0EC","#EBF7F4"]}/><Section title="Completed appointments" rows={completed} accent={C.lav} ombre={["#E7E2F7","#F2EFF9"]}/></>}
+        :<><Section title="Upcoming appointments" rows={upcoming} accent={C.blue} ombre={["#DEE8FC","#EFF4FD"]}/><Section title="Completed appointments" rows={completed} accent={C.lav} ombre={["#E7E2F7","#F2EFF9"]}/></>}
       {modal&&<AppointmentModal appt={modal==="new"?null:modal} onSave={handleSave} onClose={()=>setModal(null)}/>}
       {confirm&&<ConfirmModal message={confirm.message} onConfirm={confirmDelete} onCancel={()=>setConfirm(null)}/>}
     </div>
@@ -574,14 +568,11 @@ function ClinicModal({clinic,onSave,onClose}){
 const CLINIC_COLS = "minmax(0,2fr) minmax(0,1.4fr) minmax(0,1.8fr) 96px";
 function ClinicRow({clinic,color,last,onEdit,onDelete}){
   return (
-    <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,alignItems:"center",padding:"13px 16px",borderBottom:last?"none":`1px solid ${C.lineSoft}`,transition:"background .1s"}}
+    <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,alignItems:"center",padding:"9px 14px",borderBottom:last?"none":`1px solid ${C.lineSoft}`,transition:"background .1s"}}
       onMouseEnter={e=>e.currentTarget.style.background=C.canvas} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-      <div style={{minWidth:0,display:"flex",alignItems:"center",gap:11}}>
-        <Bar color={color} height={22}/>
-        <div style={{minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.name}</div>
-          {clinic.type&&<div style={{fontSize:12,color:C.faint,marginTop:2}}>{clinic.type}</div>}
-        </div>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:13.5,fontWeight:700,color:color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.name}</div>
+        {clinic.type&&<div style={{fontSize:12,color:C.faint,marginTop:1}}>{clinic.type}</div>}
       </div>
       <div style={{fontSize:13,color:C.sub,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.contact||<span style={{color:C.faint}}>—</span>}</div>
       <div style={{fontSize:13,color:C.sub,minWidth:0,display:"flex",alignItems:"center",gap:6}}>
@@ -611,16 +602,15 @@ function ClinicsTab(){
     <div style={{marginBottom:20,border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
       {/* Ombre header band — click to collapse */}
       <div style={{background:`linear-gradient(90deg, ${ombre[0]} 0%, ${ombre[1]} 60%, ${C.surface} 100%)`,borderBottom:collapsed[cat]?"none":`1px solid ${C.lineSoft}`}}>
-        <div onClick={()=>toggle(cat)} style={{display:"flex",alignItems:"center",gap:11,padding:"13px 16px 11px",cursor:"pointer",userSelect:"none"}}>
+        <div onClick={()=>toggle(cat)} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 14px 8px",cursor:"pointer",userSelect:"none"}}>
           <span style={{display:"inline-flex",transition:"transform .15s",transform:collapsed[cat]?"rotate(-90deg)":"rotate(0deg)",color:C.sub,fontSize:11}}>▾</span>
-          <Bar color={color} height={16}/>
-          <span style={{fontSize:12.5,fontWeight:700,color:C.ink,letterSpacing:0.6,textTransform:"uppercase"}}>{label}</span>
-          <span style={{fontSize:11.5,fontWeight:600,color:color,background:C.surface+"CC",borderRadius:20,padding:"1px 9px"}}>{items.length}</span>
+          <span style={{fontSize:12,fontWeight:700,color:color,letterSpacing:0.5,textTransform:"uppercase"}}>{label}</span>
+          <span style={{fontSize:11,fontWeight:600,color:color,background:C.surface+"CC",borderRadius:20,padding:"1px 8px"}}>{items.length}</span>
         </div>
         {!collapsed[cat]&&(
-          <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,padding:"0 16px 9px 40px"}}>
+          <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,padding:"0 14px 7px 14px"}}>
             {["Clinic","Contact","Location",""].map((h,i)=>(
-              <div key={i} style={{fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.7,textTransform:"uppercase",opacity:0.65,textAlign:i===3?"right":"left"}}>{h}</div>
+              <div key={i} style={{fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:0.6,textAlign:i===3?"right":"left"}}>{h}</div>
             ))}
           </div>
         )}
@@ -679,15 +669,14 @@ function ReportModal({report,onSave,onClose}){
 function ReportCard({report,onEdit,onDelete}){
   const cc=CAT_COLORS[report.category]||C.faint;
   return (
-    <div style={{display:"flex",gap:0,border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
-      <div style={{width:4,background:cc,flexShrink:0}}/>
-      <div style={{flex:1,padding:"15px 18px",minWidth:0}}>
+    <div style={{border:`1px solid ${C.line}`,borderRadius:10,background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
+      <div style={{padding:"11px 14px",minWidth:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:15,fontWeight:700,color:C.ink,marginBottom:5}}>{report.title||"Untitled report"}</div>
+            <div style={{fontSize:14,fontWeight:700,color:cc,marginBottom:4}}>{report.title||"Untitled report"}</div>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-              {report.category&&<Tag label={report.category} color={cc}/>}
-              {report.type&&<span style={{fontSize:12.5,color:C.sub}}>{report.type}</span>}
+              {report.category&&<span style={{fontSize:12,fontWeight:700,color:cc}}>{report.category}</span>}
+              {report.type&&<span style={{fontSize:12.5,fontWeight:600,color:TYPE_COLORS[report.type]||C.sub}}>{report.type}</span>}
               {report.date&&<span style={{fontSize:12.5,color:C.faint}}>{fmtDate(report.date)}</span>}
             </div>
           </div>
@@ -695,9 +684,9 @@ function ReportCard({report,onEdit,onDelete}){
             <EditMenu onEdit={onEdit} onDelete={onDelete}/>
           </div>
         </div>
-        {report.notes&&<div style={{fontSize:13,color:C.sub,marginTop:10,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{report.notes}</div>}
+        {report.notes&&<div style={{fontSize:13,color:C.sub,marginTop:8,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{report.notes}</div>}
         {report.files?.length>0&&(
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
             {report.files.map((file,i)=>(
               <a key={i} href={file.data} download={file.name} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:C.accent,textDecoration:"none",fontWeight:500,background:C.accentSoft,borderRadius:6,padding:"5px 11px"}}>↓ {file.name}</a>
             ))}
@@ -724,16 +713,15 @@ function ReportsTab(){
   const untyped=filtered.filter(r=>!r.type||!TYPES.includes(r.type)).sort((x,y)=>(y.date||"").localeCompare(x.date||""));
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
   const TypeGroup=({type,color,ombre,items})=>items.length>0&&(
-    <div style={{marginBottom:16,border:`1px solid ${C.line}`,borderRadius:12,overflow:"hidden",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
-      <div onClick={()=>toggle(type)} style={{display:"flex",alignItems:"center",gap:11,padding:"13px 16px",cursor:"pointer",userSelect:"none",
+    <div style={{marginBottom:12,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
+      <div onClick={()=>toggle(type)} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 14px",cursor:"pointer",userSelect:"none",
         background:`linear-gradient(90deg, ${ombre[0]} 0%, ${ombre[1]} 60%, ${C.surface} 100%)`,borderBottom:collapsed[type]?"none":`1px solid ${C.lineSoft}`}}>
         <span style={{display:"inline-flex",transition:"transform .15s",transform:collapsed[type]?"rotate(-90deg)":"rotate(0deg)",color:C.sub,fontSize:11}}>▾</span>
-        <Bar color={color} height={16}/>
-        <span style={{fontSize:12.5,fontWeight:700,color:C.ink,letterSpacing:0.5,textTransform:"uppercase"}}>{type}</span>
-        <span style={{fontSize:11.5,fontWeight:600,color,background:C.surface+"CC",borderRadius:20,padding:"1px 9px"}}>{items.length}</span>
+        <span style={{fontSize:12,fontWeight:700,color,letterSpacing:0.5,textTransform:"uppercase"}}>{type}</span>
+        <span style={{fontSize:11,fontWeight:600,color,background:C.surface+"CC",borderRadius:20,padding:"1px 8px"}}>{items.length}</span>
       </div>
       {!collapsed[type]&&(
-        <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{padding:"10px 12px",display:"flex",flexDirection:"column",gap:10}}>
           {items.map(r=><ReportCard key={r.id} report={r} onEdit={()=>setModal(r)} onDelete={()=>setConfirm({id:r.id,message:"Delete this report?"})}/>)}
         </div>
       )}
@@ -780,64 +768,62 @@ function DashboardTab(){
   const VisitCell=({cat,n})=>{
     const omb=CAT_OMBRE[cat]||["#ECEAF2","#F5F4F8"];
     return (
-      <div style={{flex:"1 1 150px",minWidth:140,borderRadius:12,border:`1px solid ${C.line}`,padding:"16px 16px 18px",
+      <div style={{flex:"1 1 140px",minWidth:130,borderRadius:10,border:`1px solid ${C.line}`,padding:"11px 13px 12px",
         background:`linear-gradient(140deg, ${omb[0]} 0%, ${omb[1]} 55%, ${C.surface} 100%)`}}>
-        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:10}}><Bar color={CAT_COLORS[cat]} height={13}/><span style={{fontSize:11,color:C.sub,fontWeight:700,letterSpacing:0.3,textTransform:"uppercase"}}>{cat}</span></div>
-        <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:-1,lineHeight:1}}>{n}</div>
-        <div style={{fontSize:11,color:C.faint,marginTop:4}}>{n===1?"visit":"visits"}</div>
+        <div style={{fontSize:11,color:CAT_COLORS[cat],fontWeight:700,letterSpacing:0.3,textTransform:"uppercase",marginBottom:7}}>{cat}</div>
+        <div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:-1,lineHeight:1}}>{n}</div>
+        <div style={{fontSize:11,color:C.faint,marginTop:3}}>{n===1?"visit":"visits"}</div>
       </div>
     );
   };
   // Money / status — one row
   const MoneyCell=({label,value,color})=>(
     <div style={{flex:1,minWidth:130,padding:"0 4px"}}>
-      <div style={{fontSize:11,color:C.faint,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase",marginBottom:8}}>{label}</div>
-      <div style={{fontSize:30,fontWeight:600,color,letterSpacing:-1,lineHeight:1}}>{value}</div>
+      <div style={{fontSize:11,color:C.faint,fontWeight:600,letterSpacing:0.3,textTransform:"uppercase",marginBottom:6}}>{label}</div>
+      <div style={{fontSize:26,fontWeight:600,color,letterSpacing:-1,lineHeight:1}}>{value}</div>
     </div>
   );
 
   return (
     <div>
-      <div style={{fontSize:12.5,color:C.faint,marginBottom:22}}>Year in review · <span style={{color:C.lav,fontWeight:700}}>{year}</span></div>
+      <div style={{fontSize:12.5,color:C.faint,marginBottom:16}}>Year in review · <span style={{color:C.lav,fontWeight:700}}>{year}</span></div>
 
       {/* Row 1 — visits by category as pastel boxes */}
       <SectionHead>Visits this year</SectionHead>
-      <div style={{display:"flex",flexWrap:"wrap",gap:12,paddingBottom:26,marginBottom:26,borderBottom:`1px solid ${C.line}`}}>
+      <div style={{display:"flex",flexWrap:"wrap",gap:10,paddingBottom:18,marginBottom:18,borderBottom:`1px solid ${C.line}`}}>
         {byCat.map(({cat,n})=><VisitCell key={cat} cat={cat} n={n}/>)}
-        <div style={{flex:"1 1 150px",minWidth:140,borderRadius:12,border:`1px solid ${C.lav}44`,padding:"16px 16px 18px",
+        <div style={{flex:"1 1 140px",minWidth:130,borderRadius:10,border:`1px solid ${C.lav}44`,padding:"11px 13px 12px",
           background:`linear-gradient(140deg, #E7E2F7 0%, #F4F1FB 55%, ${C.surface} 100%)`}}>
-          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:10}}><Bar color={C.lav} height={13}/><span style={{fontSize:11,color:C.lav,fontWeight:700,letterSpacing:0.3,textTransform:"uppercase"}}>Total</span></div>
-          <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:-1,lineHeight:1}}>{visits}</div>
-          <div style={{fontSize:11,color:C.faint,marginTop:4}}>{visits===1?"visit":"visits"}</div>
+          <div style={{fontSize:11,color:C.lav,fontWeight:700,letterSpacing:0.3,textTransform:"uppercase",marginBottom:7}}>Total</div>
+          <div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:-1,lineHeight:1}}>{visits}</div>
+          <div style={{fontSize:11,color:C.faint,marginTop:3}}>{visits===1?"visit":"visits"}</div>
         </div>
       </div>
 
       {/* Row 2 — money + pending */}
-      <div style={{display:"flex",flexWrap:"wrap",gap:"20px 0",paddingBottom:30,marginBottom:34,borderBottom:`1px solid ${C.line}`}}>
+      <div style={{display:"flex",flexWrap:"wrap",gap:"14px 0",paddingBottom:20,marginBottom:22,borderBottom:`1px solid ${C.line}`}}>
         <MoneyCell label="Total paid" value={`$${totalPaid.toFixed(2)}`} color={C.paid}/>
         <MoneyCell label="Total to pay" value={`$${totalToPay.toFixed(2)}`} color={C.due}/>
         <MoneyCell label="Pending claims" value={pending.length} color={C.pending}/>
       </div>
 
       {/* Lists */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
-        <div style={{borderRadius:14,border:`1px solid ${C.line}`,padding:"18px 20px",background:`linear-gradient(140deg, #FBEBD6 0%, #FCF5EC 45%, ${C.surface} 100%)`}}>
-          <SectionHead>Pending insurance claims</SectionHead>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <div style={{borderRadius:12,border:`1px solid ${C.line}`,padding:"12px 15px",background:`linear-gradient(140deg, #FBEBD6 0%, #FCF5EC 45%, ${C.surface} 100%)`}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.pending,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Pending insurance claims</div>
           {pending.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing pending.</p>
             :pending.map((a,i)=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 0",borderBottom:i<pending.length-1?`1px solid ${C.line}66`:"none"}}>
-                <Bar color={CAT_COLORS[a.category]||C.faint} height={28}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>{a.category||"—"}{a.type?` · ${a.type}`:""}</div><div style={{fontSize:12,color:C.sub}}>{fmtDate(a.date)}{a.clinic?` · ${a.clinic}`:""}</div></div>
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<pending.length-1?`1px solid ${C.line}66`:"none"}}>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}{a.type?<span style={{color:C.sub,fontWeight:500}}>{` · ${a.type}`}</span>:""}</div><div style={{fontSize:12,color:C.sub}}>{fmtDate(a.date)}{a.clinic?` · ${a.clinic}`:""}</div></div>
               </div>
             ))}
         </div>
-        <div style={{borderRadius:14,border:`1px solid ${C.line}`,padding:"18px 20px",background:`linear-gradient(140deg, #D6F0EC 0%, #EBF7F4 45%, ${C.surface} 100%)`}}>
-          <SectionHead>Upcoming appointments</SectionHead>
+        <div style={{borderRadius:12,border:`1px solid ${C.line}`,padding:"12px 15px",background:`linear-gradient(140deg, #DEE8FC 0%, #EFF4FD 45%, ${C.surface} 100%)`}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Upcoming appointments</div>
           {upcoming.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing scheduled.</p>
             :upcoming.map((a,i)=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 0",borderBottom:i<upcoming.length-1?`1px solid ${C.line}66`:"none"}}>
-                <Bar color={CAT_COLORS[a.category]||C.faint} height={28}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>{a.category||"—"}{a.type?` · ${a.type}`:""}</div><div style={{fontSize:12,color:C.sub}}>{a.clinic||""}</div></div>
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<upcoming.length-1?`1px solid ${C.line}66`:"none"}}>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}{a.type?<span style={{color:C.sub,fontWeight:500}}>{` · ${a.type}`}</span>:""}</div><div style={{fontSize:12,color:C.sub}}>{a.clinic||""}</div></div>
                 <span style={{fontSize:12.5,color:C.sub,fontWeight:600,flexShrink:0}}>{fmtShort(a.date)}</span>
               </div>
             ))}
