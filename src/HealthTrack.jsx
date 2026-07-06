@@ -59,29 +59,29 @@ const MONTHS = [
 ];
 const INS_TYPES = ["Medical","Dental","Vision","Life","Disability","Other"];
 
-// ── Palette — calm modern telehealth ──
+// ── Palette — calm modern telehealth (blue) ──
 const C = {
-  canvas:"#F4F7F6", surface:"#FFFFFF", ink:"#15302B", sub:"#5A6B66", faint:"#93A19C",
-  line:"#E4EAE8", lineSoft:"#EFF3F1", accent:"#0E9384", accentSoft:"#0E93841A",
-  lav:"#0E9384", lavSoft:"#0E93841A", blue:"#2563EB",
-  paid:"#0E9F6E", due:"#DC2626", pending:"#D97706",
-  tintBg:"#F0F6F5",
+  canvas:"#F4F6FB", surface:"#FFFFFF", ink:"#1A2233", sub:"#5B6478", faint:"#98A0B3",
+  line:"#E4E8F0", lineSoft:"#EFF2F8", accent:"#2563EB", accentSoft:"#2563EB1A",
+  lav:"#7C6CD6", lavSoft:"#7C6CD61A", blue:"#2563EB",
+  paid:"#1A2233", due:"#1A2233", pending:"#4F6BD6",
+  tintBg:"#EFF3FC",
 };
-// Category tints — cohesive, slightly muted modern set
-const CAT_COLORS = { Dental:"#0E7C86",Vision:"#C2620E",Specialist:"#7C5CD6",GP:"#0E9F6E","Annual Wellness":"#0E9384" };
+// Category tints — cohesive blue → lavender range
+const CAT_COLORS = { Dental:"#1D4ED8",Vision:"#3B62D6",Specialist:"#6E5BD0",GP:"#4F6BD6","Annual Wellness":"#8A6FD4" };
 // Flat soft tint background per category (single solid color, no gradient)
 const CAT_TINT = {
-  Dental:"#E4F3F4", Vision:"#FBEEDF", Specialist:"#EFEAFB", GP:"#E1F5EC", "Annual Wellness":"#E0F3F0",
+  Dental:"#E3EAFC", Vision:"#E7ECFB", Specialist:"#ECE9F9", GP:"#E8EDFB", "Annual Wellness":"#EFE9FA",
 };
-const INS_TYPE_COLORS = { Medical:"#0E7C86",Dental:"#0E9384",Vision:"#7C5CD6",Life:"#334155",Disability:"#C2620E",Other:"#52525B" };
-// Per-type accent colors + flat tints (for Reports subheaders)
+const INS_TYPE_COLORS = { Medical:"#1D4ED8",Dental:"#3B62D6",Vision:"#6E5BD0",Life:"#4F6BD6",Disability:"#8A6FD4",Other:"#5B6478" };
+// Per-type accent colors + flat tints (for Reports subheaders) — blue → lavender
 const TYPE_COLORS = {
-  "Acupuncture / TCM":"#C2620E","Eye":"#0E7C86","Cardiology":"#C81E64","Chiropractor":"#7C5CD6",
-  "Dermatology":"#0E9384","Physical Therapy":"#2563EB","Therapy":"#5B8DEF","Others":"#52525B",
+  "Acupuncture / TCM":"#8A6FD4","Eye":"#1D4ED8","Cardiology":"#6E5BD0","Chiropractor":"#4F6BD6",
+  "Dermatology":"#3B62D6","Physical Therapy":"#2563EB","Therapy":"#7C6CD6","Others":"#5B6478",
 };
 const TYPE_TINT = {
-  "Acupuncture / TCM":"#FBEEDF","Eye":"#E4F3F4","Cardiology":"#FBE4EE","Chiropractor":"#EFEAFB",
-  "Dermatology":"#E0F3F0","Physical Therapy":"#E6EDFD","Therapy":"#EAF0FD","Others":"#F1F3F2",
+  "Acupuncture / TCM":"#EFE9FA","Eye":"#E3EAFC","Cardiology":"#ECE9F9","Chiropractor":"#E8EDFB",
+  "Dermatology":"#E7ECFB","Physical Therapy":"#E3EAFC","Therapy":"#ECE9F9","Others":"#F0F2F7",
 };
 
 // ─── Utils ──────────────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ const fmtDate = d => d?new Date(d+"T12:00:00").toLocaleDateString("en-US",{month
 const fmtShort = d => d?new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—";
 const getYears = rs => { const ys=[...new Set(rs.map(r=>r.date?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a); const cy=new Date().getFullYear().toString(); if(!ys.includes(cy))ys.unshift(cy); return ys; };
 const parseMoney = v => parseFloat(String(v||"").replace(/[^0-9.]/g,""))||0;
-const fmtMoney = v => { const n=parseMoney(v); return n>0?`$${n.toFixed(2)}`:"—"; };
+const fmtMoney = v => { const n=parseMoney(v); return n>0?`$${Math.round(n).toLocaleString("en-US")}`:"—"; };
 function fileToBase64(file){ return new Promise((res,rej)=>{ if(file.size>4.5*1024*1024){rej(new Error(`${file.name} exceeds 4.5 MB`));return;} const r=new FileReader(); r.onload=()=>res({name:file.name,size:file.size,data:r.result}); r.onerror=rej; r.readAsDataURL(file); }); }
 
 // ─── Design tokens ──────────────────────────────────────────────────────────────
@@ -325,16 +325,35 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
 }
 
 // ─── Records table ──────────────────────────────────────────────────────────────
-function RecordsTable({records,onEdit,onDelete}){
+const RT_COLS=[
+  {key:"category",label:"Category",sort:"category"},
+  {key:"type",label:"Type",sort:"type"},
+  {key:"date",label:"Date",sort:"date"},
+  {key:"clinic",label:"Clinic",sort:"clinic"},
+  {key:"paid",label:"Paid",sort:"paid"},
+  {key:"toPay",label:"To pay",sort:"toPay"},
+  {key:"insurance",label:"Insurance",sort:"insurance"},
+  {key:"next",label:"Next Appointment",sort:"next"},
+  {key:"notes",label:"Notes",sort:null},
+  {key:"menu",label:"",sort:null},
+];
+function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
   return (
     <div style={{border:`1px solid ${C.line}`,borderRadius:10,overflow:"visible",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
       <div style={{overflowX:"auto",borderRadius:10}}>
         <table style={{width:"100%",borderCollapse:"collapse",minWidth:980}}>
           <thead>
             <tr style={{background:C.tintBg,borderBottom:`1px solid ${C.line}`}}>
-              {["Category","Type","Date","Clinic","Paid","To pay","Insurance","Next Appointment","Notes",""].map((h,i)=>(
-                <th key={i} style={{padding:"8px 12px",textAlign:i>=4&&i<=5?"right":"left",fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
-              ))}
+              {RT_COLS.map(col=>{
+                const sortable=col.sort&&onSort;
+                const active=sortBy===col.sort;
+                return (
+                  <th key={col.key} onClick={sortable?()=>onSort(col.sort):undefined}
+                    style={{padding:"9px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:active?C.accent:C.sub,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap",cursor:sortable?"pointer":"default",userSelect:"none"}}>
+                    {col.label}{active&&<span style={{fontSize:9,marginLeft:4}}>{dir==="asc"?"▲":"▼"}</span>}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -345,21 +364,21 @@ function RecordsTable({records,onEdit,onDelete}){
                 <tr key={r.id} style={{borderBottom:i<records.length-1?`1px solid ${C.lineSoft}`:"none",transition:"background .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.canvas}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>{r.category?<CatTag label={r.category} color={cc}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
-                <td style={{padding:"9px 12px",fontSize:13,fontWeight:r.type?600:400,color:r.type?(TYPE_COLORS[r.type]||C.sub):C.faint,whiteSpace:"nowrap"}}>{r.type||"—"}</td>
-                <td style={{padding:"9px 12px",fontSize:13,color:C.ink,whiteSpace:"nowrap"}}>{r.date?fmtDate(r.date):<span style={{color:C.faint}}>—</span>}</td>
-                <td style={{padding:"9px 12px",maxWidth:170}}>
+                <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>{r.category?<CatTag label={r.category} color={cc}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,fontWeight:r.type?600:400,color:r.type?(TYPE_COLORS[r.type]||C.sub):C.faint,whiteSpace:"nowrap"}}>{r.type||"—"}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,whiteSpace:"nowrap"}}>{r.date?fmtDate(r.date):<span style={{color:C.faint}}>—</span>}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",maxWidth:170}}>
                   {r.clinic?<div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:C.sub}}>
                     <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.clinic}</span>
                     <a href={mapsUrl(r.clinic)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a>
                   </div>:<span style={{color:C.faint,fontSize:13}}>—</span>}
                 </td>
-                <td style={{padding:"9px 12px",fontSize:13,color:parseMoney(r.paidAmount)>0?C.paid:C.faint,fontWeight:parseMoney(r.paidAmount)>0?600:400,whiteSpace:"nowrap",textAlign:"right"}}>{fmtMoney(r.paidAmount)}</td>
-                <td style={{padding:"9px 12px",fontSize:13,color:parseMoney(r.toPayAmount)>0?C.due:C.faint,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap",textAlign:"right"}}>{fmtMoney(r.toPayAmount)}</td>
-                <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
-                <td style={{padding:"9px 12px",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
-                <td style={{padding:"9px 12px",maxWidth:180}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
-                <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>
+                <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,fontWeight:parseMoney(r.paidAmount)>0?600:400,whiteSpace:"nowrap"}}>{fmtMoney(r.paidAmount)}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap"}}>{fmtMoney(r.toPayAmount)}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",maxWidth:180}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>
                   <div style={{display:"flex",justifyContent:"flex-end"}}>
                     <EditMenu onEdit={()=>onEdit(r)} onDelete={()=>onDelete(r.id)}/>
                   </div>
@@ -375,13 +394,6 @@ function RecordsTable({records,onEdit,onDelete}){
 }
 
 // ─── Appointments tab ───────────────────────────────────────────────────────────
-const APT_SORTS=[
-  {id:"date",label:"Date"},
-  {id:"paid",label:"Paid"},
-  {id:"toPay",label:"To pay"},
-  {id:"type",label:"Type"},
-  {id:"category",label:"Category"},
-];
 function sortRecords(list,sortBy,dir){
   const s=[...list];
   const m=dir==="asc"?1:-1;
@@ -392,34 +404,21 @@ function sortRecords(list,sortBy,dir){
       case "toPay": av=parseMoney(a.toPayAmount); bv=parseMoney(b.toPayAmount); break;
       case "type": av=(a.type||"").toLowerCase(); bv=(b.type||"").toLowerCase(); break;
       case "category": av=(a.category||"").toLowerCase(); bv=(b.category||"").toLowerCase(); break;
+      case "clinic": av=(a.clinic||"").toLowerCase(); bv=(b.clinic||"").toLowerCase(); break;
+      case "insurance": av=(a.insuranceStatus||"").toLowerCase(); bv=(b.insuranceStatus||"").toLowerCase(); break;
+      case "next": av=a.nextAppointmentDate||""; bv=b.nextAppointmentDate||""; break;
       default: av=a.date||""; bv=b.date||"";
     }
     if(av<bv)return -1*m; if(av>bv)return 1*m; return 0;
   });
   return s;
 }
-function SortBar({sortBy,setSortBy,dir,setDir}){
-  return (
-    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:16}}>
-      <span style={{fontSize:11,fontWeight:700,color:C.faint,letterSpacing:0.6,textTransform:"uppercase",marginRight:2}}>Sort by</span>
-      {APT_SORTS.map(sopt=>{
-        const active=sortBy===sopt.id;
-        return (
-          <button key={sopt.id} onClick={()=>{ if(active){setDir(d=>d==="asc"?"desc":"asc");} else {setSortBy(sopt.id);setDir(sopt.id==="date"?"desc":"asc");} }}
-            style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,border:`1px solid ${active?"transparent":C.line}`,cursor:"pointer",fontSize:12.5,fontWeight:active?600:500,fontFamily:FONT,
-              background:active?C.ink:C.surface,color:active?"#fff":C.sub,transition:"all .12s"}}>
-            {sopt.label}{active&&<span style={{fontSize:10}}>{dir==="asc"?"▲":"▼"}</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 function AppointmentsTab(){
   const [apts,setApts]=useState([]); const [loading,setLoading]=useState(true);
   const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
   const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fYear,setFYear]=useState(""); const [fMonth,setFMonth]=useState(""); const [fIns,setFIns]=useState("");
   const [sortBy,setSortBy]=useState("date"); const [dir,setDir]=useState("desc");
+  const onSort=key=>{ if(sortBy===key){setDir(d=>d==="asc"?"desc":"asc");} else {setSortBy(key);setDir(key==="date"?"desc":"asc");} };
   useEffect(()=>{store.get("appointments").then(d=>{if(d)setApts(d);setLoading(false);});},[]);
   const persist=async u=>{setApts(u);await store.set("appointments",u);};
   const handleSave=async a=>{const u=a.id&&apts.find(x=>x.id===a.id)?apts.map(x=>x.id===a.id?a:x):[...apts,a];await persist(u);setModal(null);};
@@ -439,7 +438,7 @@ function AppointmentsTab(){
       </div>
       {rows.length===0
         ?<div style={{...s.card,fontSize:13,color:C.faint,padding:"18px 18px"}}>{title==="Upcoming appointments"?"Nothing upcoming.":"Nothing completed yet."}</div>
-        :<RecordsTable records={rows} onEdit={a=>setModal(a)} onDelete={id=>setConfirm({id,message:"Delete this appointment?"})}/>}
+        :<RecordsTable records={rows} sortBy={sortBy} dir={dir} onSort={onSort} onEdit={a=>setModal(a)} onDelete={id=>setConfirm({id,message:"Delete this appointment?"})}/>}
     </div>
   );
   return (
@@ -454,7 +453,6 @@ function AppointmentsTab(){
         <FilterSelect value={fMonth} onChange={setFMonth} options={MONTHS} placeholder="All months" minWidth={110}/>
         <FilterSelect value={fIns} onChange={setFIns} options={INS_STATUSES} placeholder="Insurance status" minWidth={140}/>
       </FilterBar>
-      <SortBar sortBy={sortBy} setSortBy={setSortBy} dir={dir} setDir={setDir}/>
       {filtered.length===0
         ?<EmptyState>{apts.length===0?"No appointments yet. Add your first one.":"No appointments match these filters."}</EmptyState>
         :<><Section title="Upcoming appointments" rows={upcoming} accent={C.blue}/><Section title="Completed appointments" rows={completed} accent={C.accent}/></>}
@@ -668,11 +666,11 @@ function ReportModal({report,onSave,onClose}){
 function ReportCard({report,onEdit,onDelete}){
   const cc=CAT_COLORS[report.category]||C.faint;
   return (
-    <div style={{border:`1px solid ${C.line}`,borderRadius:10,background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
-      <div style={{padding:"11px 14px",minWidth:0}}>
+    <div style={{border:`1px solid ${C.line}`,borderRadius:10,background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)",textAlign:"left"}}>
+      <div style={{padding:"11px 14px",minWidth:0,textAlign:"left"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
-          <div style={{minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:700,color:cc,marginBottom:4}}>{report.title||"Untitled report"}</div>
+          <div style={{minWidth:0,textAlign:"left"}}>
+            <div style={{fontSize:14,fontWeight:700,color:cc,marginBottom:4,textAlign:"left"}}>{report.title||"Untitled report"}</div>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               {report.category&&<span style={{fontSize:12,fontWeight:700,color:cc}}>{report.category}</span>}
               {report.type&&<span style={{fontSize:12.5,fontWeight:600,color:TYPE_COLORS[report.type]||C.sub}}>{report.type}</span>}
@@ -750,7 +748,7 @@ function ReportsTab(){
 }
 
 // ─── Dashboard tab ──────────────────────────────────────────────────────────────
-function DashboardTab(){
+function DashboardTab({onOpenAppt}){
   const [apts,setApts]=useState([]); const [loading,setLoading]=useState(true);
   const year=new Date().getFullYear().toString(); const today=new Date().toISOString().slice(0,10);
   useEffect(()=>{store.get("appointments").then(d=>{if(d)setApts(d);setLoading(false);});},[]);
@@ -778,49 +776,69 @@ function DashboardTab(){
       <div style={{fontSize:26,fontWeight:700,color,letterSpacing:-1,lineHeight:1}}>{value}</div>
     </div>
   );
+  // Minimalist dashboard mini-table
+  const miniTh={textAlign:"left",fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.4,textTransform:"uppercase",padding:"0 10px 8px 0",whiteSpace:"nowrap"};
+  const miniTd={textAlign:"left",fontSize:12.5,color:C.ink,padding:"8px 10px 8px 0",whiteSpace:"nowrap"};
 
   return (
     <div>
       <div style={{fontSize:12.5,color:C.faint,marginBottom:18}}>Year in review · <span style={{color:C.accent,fontWeight:700}}>{year}</span></div>
 
-      {/* Row 1 — visits by category as flat tint boxes */}
-      <SectionHead>Visits this year</SectionHead>
+      {/* Row 1 — visits by category; total lives in the title */}
+      <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:14}}>
+        <span style={{fontSize:15,fontWeight:800,color:C.ink,letterSpacing:-0.3}}>{visits} {visits===1?"visit":"visits"} this year</span>
+        <span style={{fontSize:12,color:C.faint}}>by category</span>
+      </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:24}}>
         {byCat.map(({cat,n})=><VisitCell key={cat} cat={cat} n={n}/>)}
-        <div style={{flex:"1 1 140px",minWidth:130,borderRadius:14,border:`1px solid ${C.accent}`,padding:"14px 15px 15px",background:C.accent}}>
-          <div style={{fontSize:11,color:"#CFEDE8",fontWeight:700,letterSpacing:0.3,textTransform:"uppercase",marginBottom:8}}>Total</div>
-          <div style={{fontSize:28,fontWeight:700,color:"#fff",letterSpacing:-1,lineHeight:1}}>{visits}</div>
-          <div style={{fontSize:11,color:"#CFEDE8",marginTop:4}}>{visits===1?"visit":"visits"}</div>
-        </div>
       </div>
 
       {/* Row 2 — money + pending */}
       <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:24}}>
-        <MoneyCell label="Total paid" value={`$${totalPaid.toFixed(2)}`} color={C.paid}/>
-        <MoneyCell label="Total to pay" value={`$${totalToPay.toFixed(2)}`} color={C.due}/>
+        <MoneyCell label="Total paid" value={fmtMoney(totalPaid)} color={C.ink}/>
+        <MoneyCell label="Total to pay" value={fmtMoney(totalToPay)} color={C.ink}/>
         <MoneyCell label="Pending claims" value={pending.length} color={C.pending}/>
       </div>
 
       {/* Lists */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-        <div style={{...s.card,padding:"16px 18px"}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.pending,letterSpacing:0.5,textTransform:"uppercase",marginBottom:12}}>Pending insurance claims</div>
+        {/* Pending claims — links back to the appointment */}
+        <div style={{...s.card,padding:"16px 18px",minWidth:0}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.pending,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Pending insurance claims</div>
           {pending.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing pending.</p>
-            :pending.map((a,i)=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<pending.length-1?`1px solid ${C.lineSoft}`:"none"}}>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}{a.type?<span style={{color:C.sub,fontWeight:500}}>{` · ${a.type}`}</span>:""}</div><div style={{fontSize:12,color:C.sub}}>{fmtDate(a.date)}{a.clinic?` · ${a.clinic}`:""}</div></div>
-              </div>
-            ))}
+            :<div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",width:"100%"}}>
+              <thead><tr>{["Category","Type","Clinic","Date","Amount",""].map(h=><th key={h} style={miniTh}>{h}</th>)}</tr></thead>
+              <tbody>
+                {pending.map((a,i)=>(
+                  <tr key={a.id} style={{borderTop:`1px solid ${C.lineSoft}`}}>
+                    <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}</td>
+                    <td style={{...miniTd,color:C.sub}}>{a.type||"—"}</td>
+                    <td style={{...miniTd,color:C.sub,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis"}}>{a.clinic||"—"}</td>
+                    <td style={{...miniTd,color:C.sub}}>{fmtShort(a.date)}</td>
+                    <td style={{...miniTd}}>{fmtMoney(a.toPayAmount)}</td>
+                    <td style={{...miniTd,paddingRight:0}}><button onClick={()=>onOpenAppt&&onOpenAppt(a.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:12,fontWeight:600,fontFamily:FONT,padding:0}}>View →</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>}
         </div>
-        <div style={{...s.card,padding:"16px 18px"}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:0.5,textTransform:"uppercase",marginBottom:12}}>Upcoming appointments</div>
+        {/* Upcoming appointments — minimalist table */}
+        <div style={{...s.card,padding:"16px 18px",minWidth:0}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Upcoming appointments</div>
           {upcoming.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing scheduled.</p>
-            :upcoming.map((a,i)=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<upcoming.length-1?`1px solid ${C.lineSoft}`:"none"}}>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}{a.type?<span style={{color:C.sub,fontWeight:500}}>{` · ${a.type}`}</span>:""}</div><div style={{fontSize:12,color:C.sub}}>{a.clinic||""}</div></div>
-                <span style={{fontSize:12.5,color:C.sub,fontWeight:600,flexShrink:0}}>{fmtShort(a.date)}</span>
-              </div>
-            ))}
+            :<div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",width:"100%"}}>
+              <thead><tr>{["Category","Type","Clinic","Date"].map(h=><th key={h} style={miniTh}>{h}</th>)}</tr></thead>
+              <tbody>
+                {upcoming.map((a,i)=>(
+                  <tr key={a.id} style={{borderTop:`1px solid ${C.lineSoft}`}}>
+                    <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink}}>{a.category||"—"}</td>
+                    <td style={{...miniTd,color:C.sub}}>{a.type||"—"}</td>
+                    <td style={{...miniTd,color:C.sub,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis"}}>{a.clinic||"—"}</td>
+                    <td style={{...miniTd,color:C.sub}}>{fmtShort(a.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>}
         </div>
       </div>
     </div>
@@ -892,6 +910,93 @@ const doSignup = async () => {
   );
 }
 
+// ─── Doctor AI — floating assistant grounded in the user's own data ───────────────
+function DoctorAI(){
+  const [open,setOpen]=useState(false);
+  const [msgs,setMsgs]=useState([{role:"assistant",content:"Hi! I'm Doctor AI. Ask me anything about your appointments, reports, insurance, or clinics — I can only see the information you've saved here."}]);
+  const [input,setInput]=useState("");
+  const [busy,setBusy]=useState(false);
+  const scrollRef=useRef(null);
+  useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop=scrollRef.current.scrollHeight; },[msgs,open,busy]);
+
+  async function gatherContext(){
+    const [appointments,reports,insurance,clinics]=await Promise.all([
+      store.get("appointments"),store.get("reports"),store.get("insurance-cards"),store.get("kiv-clinics"),
+    ]);
+    // Strip large base64 file blobs — keep only filenames so the prompt stays small
+    const slimFiles=arr=>(arr||[]).map(f=>f?.name).filter(Boolean);
+    const slim=(list,keys)=>(list||[]).map(x=>{const o={};keys.forEach(k=>{if(x[k]!==undefined&&x[k]!=="")o[k]=x[k];});return o;});
+    return {
+      appointments:slim(appointments,["category","type","clinic","clinicContact","date","nextAppointmentDate","paidAmount","toPayAmount","paid","insuranceStatus","notes"]).map((a,i)=>({...a,receipts:slimFiles(appointments[i]?.receipts),eobs:slimFiles(appointments[i]?.eobs)})),
+      reports:slim(reports,["title","category","type","date","notes"]).map((r,i)=>({...r,files:slimFiles(reports[i]?.files)})),
+      insurance:slim(insurance,["insurer","planName","type","memberId","coverageStart","coverageEnd","deductible","outOfPocket","copay","notes"]),
+      clinics:slim(clinics,["name","category","type","contact","location"]),
+    };
+  }
+
+  async function send(){
+    const q=input.trim(); if(!q||busy)return;
+    setInput(""); setBusy(true);
+    const history=[...msgs,{role:"user",content:q}];
+    setMsgs(history);
+    try{
+      const ctx=await gatherContext();
+      const system=`You are Doctor AI, a helpful assistant inside a personal health-tracking app. Answer the user's questions using ONLY the JSON data provided about their own health records. Be concise, warm, and practical. If the answer isn't in their data, say so plainly. Never invent appointments, amounts, or medical facts. You are not a substitute for a licensed clinician; for medical decisions, suggest they consult their doctor. All monetary amounts are in the user's own currency.\n\nUSER DATA (JSON):\n${JSON.stringify(ctx)}`;
+      const apiMsgs=history.filter(m=>m.role==="user"||m.role==="assistant").map(m=>({role:m.role,content:m.content}));
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system,messages:apiMsgs}),
+      });
+      const data=await res.json();
+      const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim()||"Sorry, I couldn't generate a response. Please try again.";
+      setMsgs(m=>[...m,{role:"assistant",content:text}]);
+    }catch(e){
+      setMsgs(m=>[...m,{role:"assistant",content:"Something went wrong reaching the AI service. Please try again in a moment."}]);
+    }finally{ setBusy(false); }
+  }
+
+  return (
+    <>
+      {/* Floating button */}
+      <button onClick={()=>setOpen(o=>!o)} title="Doctor AI"
+        style={{position:"fixed",right:24,bottom:24,zIndex:200,display:"flex",alignItems:"center",gap:9,padding:"12px 18px",borderRadius:30,border:"none",cursor:"pointer",
+          background:C.accent,color:"#fff",fontFamily:FONT,fontSize:14,fontWeight:700,boxShadow:"0 6px 20px rgba(37,99,235,0.35)"}}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M6 8v3a6 6 0 0 0 12 0V8"/><path d="M12 17v2a4 4 0 0 0 4 4"/><circle cx="20" cy="21" r="2"/></svg>
+        {open?"Close":"Doctor AI"}
+      </button>
+
+      {/* Chat panel */}
+      {open&&(
+        <div style={{position:"fixed",right:24,bottom:84,zIndex:200,width:"min(400px, calc(100vw - 48px))",height:"min(560px, calc(100vh - 130px))",display:"flex",flexDirection:"column",
+          background:C.surface,border:`1px solid ${C.line}`,borderRadius:18,boxShadow:"0 16px 48px rgba(21,32,51,0.22)",overflow:"hidden"}}>
+          <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"center",gap:10,background:C.tintBg}}>
+            <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:9,background:C.accent,color:"#fff"}}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M6 8v3a6 6 0 0 0 12 0V8"/><path d="M12 17v2a4 4 0 0 0 4 4"/><circle cx="20" cy="21" r="2"/></svg>
+            </span>
+            <div style={{lineHeight:1.2}}>
+              <div style={{fontSize:14,fontWeight:800,color:C.ink}}>Doctor AI</div>
+              <div style={{fontSize:11,color:C.sub}}>Grounded in your saved data</div>
+            </div>
+          </div>
+          <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
+            {msgs.map((m,i)=>(
+              <div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"85%",padding:"9px 13px",borderRadius:14,fontSize:13.5,lineHeight:1.5,whiteSpace:"pre-wrap",
+                background:m.role==="user"?C.accent:C.tintBg,color:m.role==="user"?"#fff":C.ink,
+                borderBottomRightRadius:m.role==="user"?4:14,borderBottomLeftRadius:m.role==="user"?14:4}}>{m.content}</div>
+            ))}
+            {busy&&<div style={{alignSelf:"flex-start",padding:"9px 13px",borderRadius:14,fontSize:13.5,color:C.faint,background:C.tintBg}}>Thinking…</div>}
+          </div>
+          <div style={{padding:"12px 14px",borderTop:`1px solid ${C.line}`,display:"flex",gap:8}}>
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Ask about your health records…"
+              style={{...s.input,padding:"10px 12px",borderRadius:10}}/>
+            <button onClick={send} disabled={busy||!input.trim()} style={{...s.btn("primary"),padding:"10px 16px",opacity:busy||!input.trim()?0.5:1,cursor:busy||!input.trim()?"not-allowed":"pointer"}}>Send</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── App shell ──────────────────────────────────────────────────────────────────
 const TABS=[{id:"dashboard",label:"Dashboard"},{id:"appointments",label:"Appointments"},{id:"insurance",label:"Insurance"},{id:"clinics",label:"Clinics"},{id:"reports",label:"Reports"}];
 export default function App(){
@@ -938,12 +1043,13 @@ export default function App(){
       </div>
       {/* Content */}
       <div style={{maxWidth:1040,margin:"0 auto",padding:"32px 24px 64px"}}>
-        {tab==="dashboard"&&<DashboardTab/>}
+        {tab==="dashboard"&&<DashboardTab onOpenAppt={()=>setTab("appointments")}/>}
         {tab==="appointments"&&<AppointmentsTab/>}
         {tab==="reports"&&<ReportsTab/>}
         {tab==="insurance"&&<InsuranceTab/>}
         {tab==="clinics"&&<ClinicsTab/>}
       </div>
+      <DoctorAI/>
     </div>
   );
 }
