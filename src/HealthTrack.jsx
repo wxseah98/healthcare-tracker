@@ -911,9 +911,21 @@ function DashboardTab({onOpenAppt}){
   const totalPaid=thisYear.reduce((s,a)=>s+parseMoney(a.paidAmount),0);
   const totalToPay=thisYear.reduce((s,a)=>s+parseMoney(a.toPayAmount),0);
   const visits=thisYear.length;
-  const pending=apts.filter(a=>a.insuranceStatus==="Pending");
-  const upcoming=apts.filter(a=>a.date>=today).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
+  // Pending claims only apply to completed (past-dated) appointments — a future
+  // visit can't have a pending claim yet; those live under Upcoming appointments.
+  const pending=apts.filter(a=>a.insuranceStatus==="Pending" && (a.date||"")<today);
+  const upcoming=apts.filter(a=>a.date>=today);
   const byCat=CATEGORIES.map(c=>({cat:c,n:thisYear.filter(a=>a.category===c).length}));
+  // Sort state for the two dashboard mini-tables
+  const [pSort,setPSort]=useState({key:"date",dir:"desc"});
+  const [uSort,setUSort]=useState({key:"date",dir:"asc"});
+  const sortRows=(rows,st)=>{
+    const m=st.dir==="asc"?1:-1;
+    const val=(a)=>{ switch(st.key){ case "toPay":return parseMoney(a.toPayAmount); case "category":return (a.category||"").toLowerCase(); case "type":return (a.type||"").toLowerCase(); case "clinic":return (a.clinic||"").toLowerCase(); default:return a.date||""; } };
+    return [...rows].sort((a,b)=>{const av=val(a),bv=val(b); if(av<bv)return -1*m; if(av>bv)return 1*m; return 0;});
+  };
+  const pendingRows=sortRows(pending,pSort);
+  const upcomingRows=sortRows(upcoming,uSort);
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
 
   // Visits split by category — flat tint boxes
@@ -934,6 +946,16 @@ function DashboardTab({onOpenAppt}){
   // Minimalist dashboard mini-table
   const miniTh={textAlign:"left",fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.4,textTransform:"uppercase",padding:"0 10px 8px 0",whiteSpace:"nowrap"};
   const miniTd={textAlign:"left",fontSize:12.5,color:C.ink,padding:"8px 10px 8px 0",whiteSpace:"nowrap"};
+  // Sortable header cell: clicking toggles asc/desc; arrow marks the active column
+  const SortTh=({label,col,st,setSt})=>{
+    const active=st.key===col;
+    return (
+      <th onClick={()=>setSt(p=>p.key===col?{key:col,dir:p.dir==="asc"?"desc":"asc"}:{key:col,dir:col==="date"?"desc":"asc"})}
+        style={{...miniTh,cursor:"pointer",userSelect:"none",color:active?C.accent:C.sub}}>
+        {label}{active&&<span style={{fontSize:9,marginLeft:3}}>{st.dir==="asc"?"▲":"▼"}</span>}
+      </th>
+    );
+  };
 
   return (
     <div>
@@ -957,21 +979,26 @@ function DashboardTab({onOpenAppt}){
 
       {/* Lists */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-        {/* Pending claims — links back to the appointment */}
+        {/* Pending claims — completed appointments awaiting insurance */}
         <div style={{...s.card,padding:"16px 18px",minWidth:0}}>
           <div style={{fontSize:11,fontWeight:700,color:C.pending,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Pending insurance claims</div>
           {pending.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing pending.</p>
             :<div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",width:"100%"}}>
-              <thead><tr>{["Category","Type","Clinic","Date","To pay",""].map(h=><th key={h} style={miniTh}>{h}</th>)}</tr></thead>
+              <thead><tr>
+                <SortTh label="Category" col="category" st={pSort} setSt={setPSort}/>
+                <SortTh label="Type" col="type" st={pSort} setSt={setPSort}/>
+                <SortTh label="Clinic" col="clinic" st={pSort} setSt={setPSort}/>
+                <SortTh label="Date" col="date" st={pSort} setSt={setPSort}/>
+                <SortTh label="To pay" col="toPay" st={pSort} setSt={setPSort}/>
+              </tr></thead>
               <tbody>
-                {pending.map((a,i)=>(
+                {pendingRows.map((a,i)=>(
                   <tr key={a.id} style={{borderTop:`1px solid ${C.lineSoft}`}}>
                     <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.category||"—"}</td>
                     <td style={{...miniTd,color:C.sub,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.type||"—"}</td>
                     <td style={{...miniTd,color:C.sub,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis"}}>{a.clinic||"—"}</td>
                     <td style={{...miniTd,color:C.sub}}>{fmtShort(a.date)}</td>
                     <td style={{...miniTd}}>{fmtMoney(a.toPayAmount)}</td>
-                    <td style={{...miniTd,paddingRight:0}}><button onClick={()=>onOpenAppt&&onOpenAppt(a.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:12,fontWeight:600,fontFamily:FONT,padding:0}}>View →</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -982,9 +1009,14 @@ function DashboardTab({onOpenAppt}){
           <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Upcoming appointments</div>
           {upcoming.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing scheduled.</p>
             :<div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",width:"100%"}}>
-              <thead><tr>{["Category","Type","Clinic","Date"].map(h=><th key={h} style={miniTh}>{h}</th>)}</tr></thead>
+              <thead><tr>
+                <SortTh label="Category" col="category" st={uSort} setSt={setUSort}/>
+                <SortTh label="Type" col="type" st={uSort} setSt={setUSort}/>
+                <SortTh label="Clinic" col="clinic" st={uSort} setSt={setUSort}/>
+                <SortTh label="Date" col="date" st={uSort} setSt={setUSort}/>
+              </tr></thead>
               <tbody>
-                {upcoming.map((a,i)=>(
+                {upcomingRows.map((a,i)=>(
                   <tr key={a.id} style={{borderTop:`1px solid ${C.lineSoft}`}}>
                     <td style={{...miniTd,fontWeight:700,color:CAT_COLORS[a.category]||C.ink,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.category||"—"}</td>
                     <td style={{...miniTd,color:C.sub,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{a.type||"—"}</td>
@@ -1071,26 +1103,53 @@ const doSignup = async () => {
 }
 
 // ─── Settings tab ───────────────────────────────────────────────────────────────
-// A small country list for scoping map searches. State & City are free text so we
-// don't need to ship a full geo database; combined into "City, State, Country".
 const COUNTRIES=["United States","Canada","United Kingdom","Australia","Singapore","Malaysia","India","Philippines","New Zealand","Ireland","Hong Kong","United Arab Emirates","Other"];
+// States / provinces / regions per country. Countries without a fixed list fall
+// back to a free-text field (STATES[country] undefined).
+const STATES={
+  "United States":["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"],
+  "Canada":["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador","Nova Scotia","Ontario","Prince Edward Island","Quebec","Saskatchewan","Northwest Territories","Nunavut","Yukon"],
+  "United Kingdom":["England","Scotland","Wales","Northern Ireland"],
+  "Australia":["New South Wales","Victoria","Queensland","Western Australia","South Australia","Tasmania","Australian Capital Territory","Northern Territory"],
+  "Malaysia":["Johor","Kedah","Kelantan","Melaka","Negeri Sembilan","Pahang","Penang","Perak","Perlis","Sabah","Sarawak","Selangor","Terengganu","Kuala Lumpur","Labuan","Putrajaya"],
+  "India":["Andhra Pradesh","Assam","Bihar","Delhi","Gujarat","Haryana","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Punjab","Rajasthan","Tamil Nadu","Telangana","Uttar Pradesh","West Bengal"],
+  "Philippines":["Metro Manila","Cebu","Davao","Calabarzon","Central Luzon","Central Visayas","Western Visayas","Bicol","Ilocos"],
+  "New Zealand":["Auckland","Wellington","Canterbury","Waikato","Bay of Plenty","Otago","Manawatū-Whanganui","Northland"],
+  "Ireland":["Leinster","Munster","Connacht","Ulster"],
+  "United Arab Emirates":["Abu Dhabi","Dubai","Sharjah","Ajman","Umm Al Quwain","Ras Al Khaimah","Fujairah"],
+  "Singapore":["Singapore"],
+  "Hong Kong":["Hong Kong Island","Kowloon","New Territories"],
+};
+// Defined at module scope (not inside SettingsTab) so inputs keep focus while typing.
+const SettingsCard=({title,desc,children})=>(
+  <div style={{...s.card,padding:"20px 22px",marginBottom:16}}>
+    <div style={{fontSize:14,fontWeight:800,color:C.ink,marginBottom:desc?3:14}}>{title}</div>
+    {desc&&<div style={{fontSize:12.5,color:C.sub,marginBottom:16,lineHeight:1.5}}>{desc}</div>}
+    {children}
+  </div>
+);
 function SettingsTab({user}){
   // Location
   const parseLoc=()=>{ const p=(SEARCH_LOCATION||"").split(",").map(s=>s.trim()); return {city:p[0]||"",state:p[1]||"",country:p[2]||""}; };
   const [loc,setLoc]=useState(parseLoc());
   const [locSaved,setLocSaved]=useState(false);
   const saveLoc=()=>{ const parts=[loc.city,loc.state,loc.country].filter(Boolean); setSearchLocation(parts.join(", ")); setLocSaved(true); setTimeout(()=>setLocSaved(false),2000); };
+  const stateOptions=STATES[loc.country];
   // Password
-  const [pw,setPw]=useState(""); const [pw2,setPw2]=useState(""); const [pwMsg,setPwMsg]=useState(null); const [pwBusy,setPwBusy]=useState(false);
+  const [pwOld,setPwOld]=useState(""); const [pw,setPw]=useState(""); const [pw2,setPw2]=useState(""); const [pwMsg,setPwMsg]=useState(null); const [pwBusy,setPwBusy]=useState(false);
   const changePw=async()=>{
     setPwMsg(null);
-    if(pw.length<6){setPwMsg({err:true,text:"Password must be at least 6 characters."});return;}
-    if(pw!==pw2){setPwMsg({err:true,text:"Passwords don't match."});return;}
+    if(!pwOld){setPwMsg({err:true,text:"Enter your current password."});return;}
+    if(pw.length<6){setPwMsg({err:true,text:"New password must be at least 6 characters."});return;}
+    if(pw!==pw2){setPwMsg({err:true,text:"New passwords don't match."});return;}
     setPwBusy(true);
+    // Verify the current password by re-authenticating first.
+    const {error:signInErr}=await supabase.auth.signInWithPassword({email:user,password:pwOld});
+    if(signInErr){setPwBusy(false);setPwMsg({err:true,text:"Current password is incorrect."});return;}
     const {error}=await supabase.auth.updateUser({password:pw});
     setPwBusy(false);
     if(error){setPwMsg({err:true,text:error.message});return;}
-    setPw("");setPw2("");setPwMsg({err:false,text:"Password updated."});
+    setPwOld("");setPw("");setPw2("");setPwMsg({err:false,text:"Password updated."});
   };
   // Email summary
   const [emailBusy,setEmailBusy]=useState(false); const [emailMsg,setEmailMsg]=useState(null);
@@ -1142,13 +1201,6 @@ function SettingsTab({user}){
     catch(e){ setEmailMsg({err:true,text:"Couldn't copy. Try the email option."}); }
   };
 
-  const Card=({title,desc,children})=>(
-    <div style={{...s.card,padding:"20px 22px",marginBottom:16}}>
-      <div style={{fontSize:14,fontWeight:800,color:C.ink,marginBottom:desc?3:14}}>{title}</div>
-      {desc&&<div style={{fontSize:12.5,color:C.sub,marginBottom:16,lineHeight:1.5}}>{desc}</div>}
-      {children}
-    </div>
-  );
   const msgStyle=m=>({fontSize:12.5,marginTop:10,color:m.err?C.due:C.accent,fontWeight:600});
 
   return (
@@ -1156,32 +1208,37 @@ function SettingsTab({user}){
       <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:-0.4,marginBottom:6}}>Settings</div>
       <div style={{fontSize:13,color:C.sub,marginBottom:22}}>Signed in as {user}</div>
 
-      <Card title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area. State and city are free text.">
+      <SettingsCard title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area.">
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
-          <Field label="Country"><SS value={loc.country} onChange={v=>setLoc(p=>({...p,country:v}))} options={COUNTRIES} placeholder="Select country"/></Field>
-          <Field label="State / Province"><SI value={loc.state} onChange={v=>setLoc(p=>({...p,state:v}))} placeholder="e.g. California"/></Field>
+          <Field label="Country"><SS value={loc.country} onChange={v=>setLoc(p=>({...p,country:v,state:""}))} options={COUNTRIES} placeholder="Select country"/></Field>
+          <Field label="State / Province">
+            {stateOptions
+              ?<SS value={loc.state} onChange={v=>setLoc(p=>({...p,state:v}))} options={stateOptions} placeholder="Select state"/>
+              :<SI value={loc.state} onChange={v=>setLoc(p=>({...p,state:v}))} placeholder="e.g. California"/>}
+          </Field>
         </div>
         <Field label="City"><SI value={loc.city} onChange={v=>setLoc(p=>({...p,city:v}))} placeholder="e.g. San Francisco"/></Field>
         <button onClick={saveLoc} style={s.btn("primary")}>Save location</button>
         {locSaved&&<span style={{fontSize:12.5,marginLeft:12,color:C.accent,fontWeight:600}}>Saved — searches now scoped to {[loc.city,loc.state,loc.country].filter(Boolean).join(", ")||"nowhere set"}.</span>}
-      </Card>
+      </SettingsCard>
 
-      <Card title="Change password" desc="Update the password for your account.">
+      <SettingsCard title="Change password" desc="Confirm your current password, then set a new one.">
+        <Field label="Current password"><input type="password" value={pwOld} onChange={e=>setPwOld(e.target.value)} placeholder="Current password" style={s.input}/></Field>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
           <Field label="New password"><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="New password" style={s.input}/></Field>
-          <Field label="Confirm password"><input type="password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="Re-enter password" style={s.input}/></Field>
+          <Field label="Confirm new password"><input type="password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="Re-enter new password" style={s.input}/></Field>
         </div>
         <button onClick={changePw} disabled={pwBusy} style={{...s.btn("primary"),opacity:pwBusy?0.7:1,cursor:pwBusy?"not-allowed":"pointer"}}>{pwBusy?"Updating…":"Update password"}</button>
         {pwMsg&&<div style={msgStyle(pwMsg)}>{pwMsg.text}</div>}
-      </Card>
+      </SettingsCard>
 
-      <Card title="Email me a summary" desc="Pulls everything across Appointments, Reports, Insurance, and Clinics into a plain-text summary (attachments not included) and drafts it in your email app. You can also copy it to the clipboard.">
+      <SettingsCard title="Email me a summary" desc="Pulls everything across Appointments, Reports, Insurance, and Clinics into a plain-text summary (attachments not included) and drafts it in your email app. You can also copy it to the clipboard.">
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button onClick={emailSummary} disabled={emailBusy} style={{...s.btn("primary"),opacity:emailBusy?0.7:1,cursor:emailBusy?"not-allowed":"pointer"}}>{emailBusy?"Building…":"Email me a summary"}</button>
           <button onClick={copySummary} style={s.btn("ghost")}>Copy to clipboard</button>
         </div>
         {emailMsg&&<div style={msgStyle(emailMsg)}>{emailMsg.text}</div>}
-      </Card>
+      </SettingsCard>
     </div>
   );
 }
