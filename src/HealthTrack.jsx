@@ -263,11 +263,32 @@ function Modal({title,onClose,children,wide}){
 // In-app receipt preview — renders images inline and PDFs in an iframe, with
 // tabs when there are multiple files. Avoids the about:blank / download issue
 // that happens when opening large base64 data URLs in a new tab.
+function dataURLtoBlob(dataurl){
+  try{
+    const arr=String(dataurl).split(","); if(arr.length<2) return null;
+    const mime=(arr[0].match(/:(.*?);/)||[])[1]||"application/octet-stream";
+    const bstr=atob(arr[1]); let n=bstr.length; const u8=new Uint8Array(n);
+    while(n--) u8[n]=bstr.charCodeAt(n);
+    return new Blob([u8],{type:mime});
+  }catch(e){ return null; }
+}
 function ReceiptViewer({files,onClose,startIndex=0}){
   const isMobile=useIsMobile();
   const [idx,setIdx]=useState(startIndex);
+  const [blobUrl,setBlobUrl]=useState(null);
   useEffect(()=>{const esc=e=>e.key==="Escape"&&onClose();window.addEventListener("keydown",esc);return()=>window.removeEventListener("keydown",esc);},[]);
   const file=files[idx]||files[0];
+  // Convert the stored base64 data URL into a blob URL. Mobile browsers refuse to
+  // open giant "data:" URLs in a new tab, but blob URLs load and scroll fine.
+  useEffect(()=>{
+    if(!file?.data){setBlobUrl(null);return;}
+    const b=dataURLtoBlob(file.data);
+    if(!b){setBlobUrl(file.data);return;}
+    const url=URL.createObjectURL(b);
+    setBlobUrl(url);
+    return ()=>URL.revokeObjectURL(url);
+  },[file]);
+  const src=blobUrl||file?.data;
   const isPdf=(file?.name||"").toLowerCase().endsWith(".pdf")||String(file?.data||"").startsWith("data:application/pdf");
   const isImg=/^data:image\//.test(file?.data||"")||/\.(png|jpe?g|gif|webp|heic)$/i.test(file?.name||"");
   return (
@@ -280,8 +301,8 @@ function ReceiptViewer({files,onClose,startIndex=0}){
             {files.length>1&&<div style={{fontSize:11.5,color:C.faint,marginTop:2}}>{idx+1} of {files.length}</div>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-            <a href={file?.data} target="_blank" rel="noreferrer" style={{fontSize:12,color:C.accent,textDecoration:"none",fontWeight:600,padding:"6px 10px",borderRadius:6,border:`1px solid ${C.line}`}}>Open</a>
-            <a href={file?.data} download={file?.name} style={{fontSize:12,color:C.accent,textDecoration:"none",fontWeight:600,padding:"6px 10px",borderRadius:6,border:`1px solid ${C.line}`}}>Download</a>
+            <a href={src} target="_blank" rel="noreferrer" style={{fontSize:12,color:C.accent,textDecoration:"none",fontWeight:600,padding:"6px 10px",borderRadius:6,border:`1px solid ${C.line}`}}>Open</a>
+            <a href={src} download={file?.name} style={{fontSize:12,color:C.accent,textDecoration:"none",fontWeight:600,padding:"6px 10px",borderRadius:6,border:`1px solid ${C.line}`}}>Download</a>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.faint,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}
               onMouseEnter={e=>e.currentTarget.style.background=C.lineSoft} onMouseLeave={e=>e.currentTarget.style.background="none"}>✕</button>
           </div>
@@ -295,16 +316,17 @@ function ReceiptViewer({files,onClose,startIndex=0}){
           </div>
         )}
         <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",background:C.canvas,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:isImg?"center":"flex-start",padding:16,minHeight:0}}>
-          {isImg
-            ?<img src={file?.data} alt={file?.name} style={{maxWidth:"100%",height:"auto",objectFit:"contain",borderRadius:6,boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}/>
+          {!src?<div style={{color:C.faint,fontSize:13,padding:32}}>Loading…</div>
+            :isImg
+            ?<img src={src} alt={file?.name} style={{maxWidth:"100%",height:"auto",objectFit:"contain",borderRadius:6,boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}/>
             :isPdf
               ?(isMobile
                   ?<div style={{textAlign:"center",color:C.sub,fontSize:13.5,padding:"32px 8px",maxWidth:360}}>
-                     <div style={{marginBottom:16,lineHeight:1.5}}>PDFs open best in your phone's viewer, where you can scroll through every page.</div>
-                     <a href={file?.data} target="_blank" rel="noreferrer" style={{display:"inline-block",...s.btn("primary"),textDecoration:"none"}}>Open PDF</a>
+                     <div style={{marginBottom:16,lineHeight:1.5}}>Tap below to open this PDF in your phone's viewer, where you can scroll through every page.</div>
+                     <a href={src} target="_blank" rel="noreferrer" style={{display:"inline-block",...s.btn("primary"),textDecoration:"none"}}>Open PDF</a>
                    </div>
-                  :<iframe title={file?.name} src={file?.data} style={{width:"100%",height:"75vh",border:"none",borderRadius:6,background:"#fff",flexShrink:0}}/>)
-              :<div style={{textAlign:"center",color:C.sub,fontSize:13.5,padding:"32px 8px"}}>Can't preview this file type.<br/><a href={file?.data} download={file?.name} style={{color:C.accent,fontWeight:600,textDecoration:"none"}}>Download {file?.name}</a> to view it.</div>}
+                  :<iframe title={file?.name} src={src} style={{width:"100%",height:"75vh",border:"none",borderRadius:6,background:"#fff",flexShrink:0}}/>)
+              :<div style={{textAlign:"center",color:C.sub,fontSize:13.5,padding:"32px 8px"}}>Can't preview this file type.<br/><a href={src} download={file?.name} style={{color:C.accent,fontWeight:600,textDecoration:"none"}}>Download {file?.name}</a> to view it.</div>}
         </div>
       </div>
     </div>
