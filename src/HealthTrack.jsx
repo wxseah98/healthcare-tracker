@@ -683,7 +683,7 @@ function InsuranceTab(){
 }
 
 // ─── Clinics tab ────────────────────────────────────────────────────────────────
-const BLANK_CLINIC={id:"",name:"",category:"",type:"",contact:"",location:"",notes:""};
+const BLANK_CLINIC={id:"",name:"",category:"",type:"",contact:"",notes:""};
 function ClinicModal({clinic,onSave,onClose}){
   const [f,setF]=useState({...BLANK_CLINIC,...(clinic||{})}); const set=k=>v=>setF(p=>({...p,[k]:v})); const [err,setErr]=useState("");
   const handleSave=()=>{if(!f.name){setErr("Clinic name is required.");return;}onSave({...f,id:f.id||uid()});};
@@ -694,13 +694,12 @@ function ClinicModal({clinic,onSave,onClose}){
         <Field label="Category"><SS value={f.category} onChange={set("category")} options={CATEGORIES} placeholder="Select category"/></Field>
         <Field label="Type"><SS value={f.type} onChange={set("type")} options={TYPES} placeholder="Select type"/></Field>
       </div>
-      <Field label="Clinic / provider name" required><SI value={f.name} onChange={set("name")} placeholder="Clinic name"/></Field>
-      <Field label="Contact"><SI value={f.contact} onChange={set("contact")} placeholder="Phone or email"/></Field>
-      <Field label="Location" hint="A map link will auto-generate">
-        <div style={{display:"flex",gap:6}}><SI value={f.location} onChange={set("location")} placeholder="Address or area"/>
-          {f.location&&<a href={mapsUrl(f.location)} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",padding:"0 12px",background:C.lineSoft,borderRadius:6,textDecoration:"none",fontSize:12,color:C.accent,flexShrink:0,fontWeight:600}}>Map</a>}
+      <Field label="Clinic / provider name" required hint="A map link will auto-generate from this name">
+        <div style={{display:"flex",gap:6}}><SI value={f.name} onChange={set("name")} placeholder="Clinic name"/>
+          {f.name&&<a href={mapsUrl(f.name)} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",padding:"0 12px",background:C.lineSoft,borderRadius:6,textDecoration:"none",fontSize:12,color:C.accent,flexShrink:0,fontWeight:600}}>Map</a>}
         </div>
       </Field>
+      <Field label="Contact"><SI value={f.contact} onChange={set("contact")} placeholder="Phone or email"/></Field>
       <Field label="Notes"><STA value={f.notes} onChange={set("notes")} placeholder="Any notes about this clinic" rows={2}/></Field>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:14,borderTop:`1px solid ${C.lineSoft}`,marginTop:6}}>
         <button onClick={onClose} style={s.btn("ghost")}>Cancel</button>
@@ -709,7 +708,7 @@ function ClinicModal({clinic,onSave,onClose}){
     </Modal>
   );
 }
-const CLINIC_COLS = "44px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(0,1.4fr)";
+const CLINIC_COLS = "44px minmax(0,1.8fr) minmax(0,1.1fr) minmax(0,1.4fr) minmax(0,1.6fr)";
 function ClinicRow({clinic,color,last,onEdit,onDelete}){
   return (
     <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,alignItems:"center",padding:"9px 14px",borderBottom:last?"none":`1px solid ${C.lineSoft}`,transition:"background .1s"}}
@@ -719,13 +718,10 @@ function ClinicRow({clinic,color,last,onEdit,onDelete}){
       </div>
       <div style={{minWidth:0,textAlign:"left",display:"flex",alignItems:"center",gap:6}}>
         <span style={{fontSize:13.5,fontWeight:700,color:color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.name}</span>
-        {clinic.name&&<a href={mapsUrl(clinic.location||clinic.name)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a>}
+        {clinic.name&&<a href={mapsUrl(clinic.name)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a>}
       </div>
       <div style={{minWidth:0,textAlign:"left",fontSize:13,color:clinic.type?C.sub:C.faint,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.type||"—"}</div>
       <div style={{fontSize:13,color:C.sub,minWidth:0,textAlign:"left",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.contact||<span style={{color:C.faint}}>—</span>}</div>
-      <div style={{fontSize:13,color:C.sub,minWidth:0,textAlign:"left",display:"flex",alignItems:"center",gap:6}}>
-        {clinic.location?<><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.location}</span><a href={mapsUrl(clinic.location)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a></>:<span style={{color:C.faint}}>—</span>}
-      </div>
       <div style={{minWidth:0,textAlign:"left",fontSize:12.5,color:clinic.notes?C.sub:C.faint,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={clinic.notes||""}>{clinic.notes||"—"}</div>
     </div>
   );
@@ -739,7 +735,7 @@ function ClinicsTab(){
   const persist=async u=>{setClinics(u);await store.set("kiv-clinics",u);};
   const handleSave=async c=>{const u=c.id&&clinics.find(x=>x.id===c.id)?clinics.map(x=>x.id===c.id?c:x):[...clinics,c];await persist(u);setModal(null);};
   const confirmDelete=async()=>{await persist(clinics.filter(c=>c.id!==confirm.id));setConfirm(null);};
-  const filtered=clinics.filter(c=>fCat==="All"||c.category===fCat).filter(c=>!fType||c.type===fType).filter(c=>!fLoc||c.location?.toLowerCase().includes(fLoc.toLowerCase()));
+  const filtered=clinics.filter(c=>fCat==="All"||c.category===fCat).filter(c=>!fType||c.type===fType).filter(c=>!fLoc||c.name?.toLowerCase().includes(fLoc.toLowerCase()));
   const grouped=CATEGORIES.reduce((a,cat)=>{a[cat]=filtered.filter(c=>c.category===cat);return a;},{});
   const uncat=filtered.filter(c=>!c.category||!CATEGORIES.includes(c.category));
   const anyResult=filtered.length>0;
@@ -754,7 +750,7 @@ function ClinicsTab(){
         </div>
         {!collapsed[cat]&&(
           <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,padding:"0 16px 8px 16px"}}>
-            {["","Clinic","Type","Contact","Location","Notes"].map((h,i)=>(
+            {["","Clinic","Type","Contact","Notes"].map((h,i)=>(
               <div key={i} style={{fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:0.6,textAlign:"left"}}>{h}</div>
             ))}
           </div>
@@ -772,7 +768,7 @@ function ClinicsTab(){
       <FilterBar filters={fType||fLoc} onClear={()=>{setFType("");setFLoc("");}}
         action={<button onClick={()=>setModal({})} style={s.btn("primary")}>+ Add clinic</button>}>
         <FilterSelect value={fType} onChange={setFType} options={TYPES} placeholder="All types" minWidth={130}/>
-        <input value={fLoc} onChange={e=>setFLoc(e.target.value)} placeholder="Search location"
+        <input value={fLoc} onChange={e=>setFLoc(e.target.value)} placeholder="Search clinic"
           style={{padding:"6px 11px",fontSize:12.5,fontFamily:FONT,border:`1px solid ${fLoc?C.accent:C.line}`,background:C.surface,color:C.ink,width:180,borderRadius:6,outline:"none"}}/>
       </FilterBar>
       {clinics.length===0?<EmptyState>No clinics saved yet. Add ones you want to keep track of.</EmptyState>
@@ -1199,7 +1195,7 @@ function SettingsTab({user}){
     L.push("");
     L.push("CLINICS ("+(clinics?.length||0)+")");
     (clinics||[]).forEach(c=>{
-      L.push(`- ${c.name||"—"} | ${c.category||"—"} / ${c.type||"—"} | ${c.contact||"—"} | ${c.location||"—"}${c.notes?` | notes: ${c.notes}`:""}`);
+      L.push(`- ${c.name||"—"} | ${c.category||"—"} / ${c.type||"—"} | ${c.contact||"—"}${c.notes?` | notes: ${c.notes}`:""}`);
     });
     L.push("");
     L.push("(Attachments are not included in this summary.)");
