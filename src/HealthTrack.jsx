@@ -207,14 +207,14 @@ function FilterSelect({value,onChange,options,placeholder,minWidth=120}){
   );
 }
 function FileUpload({files=[],onUpload,onRemove,label}){
-  const ref=useRef(); const [err,setErr]=useState("");
+  const ref=useRef(); const [err,setErr]=useState(""); const [preview,setPreview]=useState(null);
   const handle=async e=>{ setErr(""); const res=[]; for(const f of Array.from(e.target.files)){try{res.push(await fileToBase64(f));}catch(ex){setErr(ex.message);}} if(res.length)onUpload(res); e.target.value=""; };
   return (
     <div>
       {files.length>0&&<div style={{marginBottom:8}}>{files.map((f,i)=>(
         <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:C.lineSoft,borderRadius:5,marginBottom:4}}>
-          <a href={f.data} download={f.name} style={{flex:1,fontSize:12,color:C.accent,textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</a>
-          <button onClick={()=>onRemove(i)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:16,padding:"0 2px",lineHeight:1}}>×</button>
+          <button type="button" onClick={()=>setPreview(i)} style={{flex:1,textAlign:"left",background:"none",border:"none",cursor:"pointer",fontFamily:FONT,fontSize:12,color:C.accent,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",padding:0}}>{f.name}</button>
+          <button type="button" onClick={()=>onRemove(i)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:16,padding:"0 2px",lineHeight:1}}>×</button>
         </div>
       ))}</div>}
       <button type="button" onClick={()=>ref.current?.click()}
@@ -223,6 +223,7 @@ function FileUpload({files=[],onUpload,onRemove,label}){
         onMouseLeave={e=>{e.currentTarget.style.borderColor=C.line;e.currentTarget.style.color=C.sub;}}>Upload {label||"file"}</button>
       {err&&<p style={{margin:"5px 0 0",fontSize:12,color:C.due}}>{err}</p>}
       <input ref={ref} type="file" multiple accept="image/*,.pdf,.doc,.docx" onChange={handle} style={{display:"none"}}/>
+      {preview!==null&&<ReceiptViewer files={files} startIndex={preview} onClose={()=>setPreview(null)}/>}
     </div>
   );
 }
@@ -245,8 +246,8 @@ function Modal({title,onClose,children,wide}){
 // In-app receipt preview — renders images inline and PDFs in an iframe, with
 // tabs when there are multiple files. Avoids the about:blank / download issue
 // that happens when opening large base64 data URLs in a new tab.
-function ReceiptViewer({files,onClose}){
-  const [idx,setIdx]=useState(0);
+function ReceiptViewer({files,onClose,startIndex=0}){
+  const [idx,setIdx]=useState(startIndex);
   useEffect(()=>{const esc=e=>e.key==="Escape"&&onClose();window.addEventListener("keydown",esc);return()=>window.removeEventListener("keydown",esc);},[]);
   const file=files[idx]||files[0];
   const isPdf=(file?.name||"").toLowerCase().endsWith(".pdf")||String(file?.data||"").startsWith("data:application/pdf");
@@ -803,7 +804,7 @@ function ReportModal({report,onSave,onClose}){
     </Modal>
   );
 }
-function ReportCard({report,onEdit,onDelete}){
+function ReportCard({report,onEdit,onDelete,onViewFiles}){
   const cc=CAT_COLORS[report.category]||C.faint;
   return (
     <div style={{border:`1px solid ${C.line}`,borderRadius:10,background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)",textAlign:"left"}}>
@@ -825,7 +826,10 @@ function ReportCard({report,onEdit,onDelete}){
         {report.files?.length>0&&(
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
             {report.files.map((file,i)=>(
-              <a key={i} href={file.data} download={file.name} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:C.accent,textDecoration:"none",fontWeight:500,background:C.accentSoft,borderRadius:6,padding:"5px 11px"}}>↓ {file.name}</a>
+              <button key={i} onClick={()=>onViewFiles&&onViewFiles(report.files,i)} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:C.accent,border:"none",cursor:"pointer",fontWeight:500,fontFamily:FONT,background:C.accentSoft,borderRadius:6,padding:"5px 11px"}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                {file.name}
+              </button>
             ))}
           </div>
         )}
@@ -834,9 +838,10 @@ function ReportCard({report,onEdit,onDelete}){
   );
 }
 function ReportsTab(){
-  const [reports,setReports]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
+  const [reports,setReports]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null); const [viewFiles,setViewFiles]=useState(null);
   const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fYear,setFYear]=useState(""); const [fMonth,setFMonth]=useState("");
   const [collapsed,setCollapsed]=useState({});
+  const [dateDir,setDateDir]=useState("desc");
   const toggle=t=>setCollapsed(p=>({...p,[t]:!p[t]}));
   useEffect(()=>{store.get("reports").then(d=>{if(d)setReports(d);setLoading(false);});},[]);
   const persist=async u=>{setReports(u);await store.set("reports",u);};
@@ -846,8 +851,9 @@ function ReportsTab(){
   const filtered=reports.filter(r=>fCat==="All"||r.category===fCat).filter(r=>!fType||r.type===fType).filter(r=>!fYear||r.date?.startsWith(fYear)).filter(r=>!fMonth||r.date?.slice(5,7)===fMonth);
   const anyResult=filtered.length>0;
   // group by type, preserving TYPES order, plus an "Uncategorized" bucket
-  const grouped=TYPES.reduce((a,t)=>{a[t]=filtered.filter(r=>r.type===t).sort((x,y)=>(y.date||"").localeCompare(x.date||""));return a;},{});
-  const untyped=filtered.filter(r=>!r.type||!TYPES.includes(r.type)).sort((x,y)=>(y.date||"").localeCompare(x.date||""));
+  const byDate=(x,y)=>dateDir==="desc"?(y.date||"").localeCompare(x.date||""):(x.date||"").localeCompare(y.date||"");
+  const grouped=TYPES.reduce((a,t)=>{a[t]=filtered.filter(r=>r.type===t).sort(byDate);return a;},{});
+  const untyped=filtered.filter(r=>!r.type||!TYPES.includes(r.type)).sort(byDate);
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
   const TypeGroup=({type,color,tint,items})=>items.length>0&&(
     <div style={{marginBottom:12,border:`1px solid ${C.line}`,borderRadius:16,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(21,48,43,0.04)"}}>
@@ -859,7 +865,7 @@ function ReportsTab(){
       </div>
       {!collapsed[type]&&(
         <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
-          {items.map(r=><ReportCard key={r.id} report={r} onEdit={()=>setModal(r)} onDelete={()=>setConfirm({id:r.id,message:"Delete this report?"})}/>)}
+          {items.map(r=><ReportCard key={r.id} report={r} onEdit={()=>setModal(r)} onDelete={()=>setConfirm({id:r.id,message:"Delete this report?"})} onViewFiles={(files,i)=>setViewFiles({files,startIndex:i})}/>)}
         </div>
       )}
     </div>
@@ -871,6 +877,10 @@ function ReportsTab(){
       </div>
       <FilterBar filters={hasF} onClear={()=>{setFType("");setFYear("");setFMonth("");}}
         action={<button onClick={()=>setModal("new")} style={s.btn("primary")}>+ Add report</button>}>
+        <button onClick={()=>setDateDir(d=>d==="desc"?"asc":"desc")}
+          style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${C.line}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
+          Date {dateDir==="desc"?"▼":"▲"}
+        </button>
         <FilterSelect value={fType} onChange={setFType} options={TYPES} placeholder="All types" minWidth={130}/>
         <FilterSelect value={fYear} onChange={setFYear} options={years} placeholder="All years" minWidth={90}/>
         <FilterSelect value={fMonth} onChange={setFMonth} options={MONTHS} placeholder="All months" minWidth={110}/>
@@ -883,6 +893,7 @@ function ReportsTab(){
         </div>}
       {modal&&<ReportModal report={modal==="new"?null:modal} onSave={handleSave} onClose={()=>setModal(null)}/>}
       {confirm&&<ConfirmModal message={confirm.message} onConfirm={confirmDelete} onCancel={()=>setConfirm(null)}/>}
+      {viewFiles&&<ReceiptViewer files={viewFiles.files} startIndex={viewFiles.startIndex} onClose={()=>setViewFiles(null)}/>}
     </div>
   );
 }
