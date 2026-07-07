@@ -86,7 +86,11 @@ const TYPE_TINT = {
 
 // ─── Utils ──────────────────────────────────────────────────────────────────────
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
-const mapsUrl = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+// User's saved location (City, State, Country) used to scope map searches.
+// Held module-level so mapsUrl can read it; persisted in localStorage.
+let SEARCH_LOCATION = (typeof localStorage!=="undefined" && localStorage.getItem("ht_location")) || "";
+const setSearchLocation = loc => { SEARCH_LOCATION=loc||""; try{localStorage.setItem("ht_location",SEARCH_LOCATION);}catch(e){} };
+const mapsUrl = q => { const scoped=SEARCH_LOCATION?`${q} ${SEARCH_LOCATION}`:q; return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(scoped)}`; };
 const fmtDate = d => d?new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"—";
 const fmtShort = d => d?new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—";
 const getYears = rs => { const ys=[...new Set(rs.map(r=>r.date?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a); const cy=new Date().getFullYear().toString(); if(!ys.includes(cy))ys.unshift(cy); return ys; };
@@ -642,10 +646,10 @@ function InsuranceCard({card,onEdit,onDelete}){
   return (
     <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.line}`,overflow:"hidden"}}>
       <div style={{padding:"16px 18px",borderBottom:`1px solid ${C.lineSoft}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div>
+        <div style={{textAlign:"left",minWidth:0}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:6,marginBottom:6}}><Dot color={col} size={7}/><span style={{fontSize:10.5,fontWeight:700,color:col,letterSpacing:0.6,textTransform:"uppercase"}}>{card.type||"Insurance"}</span></div>
-          <div style={{fontSize:16,fontWeight:700,color:C.ink,letterSpacing:-0.2}}>{card.insurer||"—"}</div>
-          {card.planName&&<div style={{fontSize:12.5,color:C.faint,marginTop:2}}>{card.planName}</div>}
+          <div style={{fontSize:16,fontWeight:700,color:C.ink,letterSpacing:-0.2,textAlign:"left"}}>{card.insurer||"—"}</div>
+          {card.planName&&<div style={{fontSize:12.5,color:C.faint,marginTop:2,textAlign:"left"}}>{card.planName}</div>}
         </div>
         <div style={{display:"flex",gap:2}}>
           <EditMenu onEdit={onEdit} onDelete={onDelete}/>
@@ -679,7 +683,7 @@ function InsuranceTab(){
 }
 
 // ─── Clinics tab ────────────────────────────────────────────────────────────────
-const BLANK_CLINIC={id:"",name:"",category:"",type:"",contact:"",location:""};
+const BLANK_CLINIC={id:"",name:"",category:"",type:"",contact:"",location:"",notes:""};
 function ClinicModal({clinic,onSave,onClose}){
   const [f,setF]=useState({...BLANK_CLINIC,...(clinic||{})}); const set=k=>v=>setF(p=>({...p,[k]:v})); const [err,setErr]=useState("");
   const handleSave=()=>{if(!f.name){setErr("Clinic name is required.");return;}onSave({...f,id:f.id||uid()});};
@@ -697,6 +701,7 @@ function ClinicModal({clinic,onSave,onClose}){
           {f.location&&<a href={mapsUrl(f.location)} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",padding:"0 12px",background:C.lineSoft,borderRadius:6,textDecoration:"none",fontSize:12,color:C.accent,flexShrink:0,fontWeight:600}}>Map</a>}
         </div>
       </Field>
+      <Field label="Notes"><STA value={f.notes} onChange={set("notes")} placeholder="Any notes about this clinic" rows={2}/></Field>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:14,borderTop:`1px solid ${C.lineSoft}`,marginTop:6}}>
         <button onClick={onClose} style={s.btn("ghost")}>Cancel</button>
         <button onClick={handleSave} style={s.btn("primary")}>Save</button>
@@ -704,22 +709,21 @@ function ClinicModal({clinic,onSave,onClose}){
     </Modal>
   );
 }
-const CLINIC_COLS = "minmax(0,2fr) minmax(0,1.4fr) minmax(0,1.8fr) 96px";
+const CLINIC_COLS = "44px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(0,1.4fr)";
 function ClinicRow({clinic,color,last,onEdit,onDelete}){
   return (
     <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,alignItems:"center",padding:"9px 14px",borderBottom:last?"none":`1px solid ${C.lineSoft}`,transition:"background .1s"}}
       onMouseEnter={e=>e.currentTarget.style.background=C.canvas} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-      <div style={{minWidth:0}}>
-        <div style={{fontSize:13.5,fontWeight:700,color:color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.name}</div>
-        {clinic.type&&<div style={{fontSize:12,color:C.faint,marginTop:1}}>{clinic.type}</div>}
-      </div>
-      <div style={{fontSize:13,color:C.sub,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.contact||<span style={{color:C.faint}}>—</span>}</div>
-      <div style={{fontSize:13,color:C.sub,minWidth:0,display:"flex",alignItems:"center",gap:6}}>
-        {clinic.location?<><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.location}</span><a href={mapsUrl(clinic.location)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a></>:<span style={{color:C.faint}}>—</span>}
-      </div>
-      <div style={{display:"flex",flexShrink:0,justifyContent:"flex-end"}}>
+      <div style={{display:"flex",justifyContent:"flex-start"}}>
         <EditMenu onEdit={onEdit} onDelete={onDelete}/>
       </div>
+      <div style={{minWidth:0,textAlign:"left",fontSize:13.5,fontWeight:700,color:color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.name}</div>
+      <div style={{minWidth:0,textAlign:"left",fontSize:13,color:clinic.type?C.sub:C.faint,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.type||"—"}</div>
+      <div style={{fontSize:13,color:C.sub,minWidth:0,textAlign:"left",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.contact||<span style={{color:C.faint}}>—</span>}</div>
+      <div style={{fontSize:13,color:C.sub,minWidth:0,textAlign:"left",display:"flex",alignItems:"center",gap:6}}>
+        {clinic.location?<><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.location}</span><a href={mapsUrl(clinic.location)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a></>:<span style={{color:C.faint}}>—</span>}
+      </div>
+      <div style={{minWidth:0,textAlign:"left",fontSize:12.5,color:clinic.notes?C.sub:C.faint,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={clinic.notes||""}>{clinic.notes||"—"}</div>
     </div>
   );
 }
@@ -747,8 +751,8 @@ function ClinicsTab(){
         </div>
         {!collapsed[cat]&&(
           <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,padding:"0 16px 8px 16px"}}>
-            {["Clinic","Contact","Location",""].map((h,i)=>(
-              <div key={i} style={{fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:0.6,textAlign:i===3?"right":"left"}}>{h}</div>
+            {["","Clinic","Type","Contact","Location","Notes"].map((h,i)=>(
+              <div key={i} style={{fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:0.6,textAlign:"left"}}>{h}</div>
             ))}
           </div>
         )}
@@ -1066,8 +1070,124 @@ const doSignup = async () => {
   );
 }
 
+// ─── Settings tab ───────────────────────────────────────────────────────────────
+// A small country list for scoping map searches. State & City are free text so we
+// don't need to ship a full geo database; combined into "City, State, Country".
+const COUNTRIES=["United States","Canada","United Kingdom","Australia","Singapore","Malaysia","India","Philippines","New Zealand","Ireland","Hong Kong","United Arab Emirates","Other"];
+function SettingsTab({user}){
+  // Location
+  const parseLoc=()=>{ const p=(SEARCH_LOCATION||"").split(",").map(s=>s.trim()); return {city:p[0]||"",state:p[1]||"",country:p[2]||""}; };
+  const [loc,setLoc]=useState(parseLoc());
+  const [locSaved,setLocSaved]=useState(false);
+  const saveLoc=()=>{ const parts=[loc.city,loc.state,loc.country].filter(Boolean); setSearchLocation(parts.join(", ")); setLocSaved(true); setTimeout(()=>setLocSaved(false),2000); };
+  // Password
+  const [pw,setPw]=useState(""); const [pw2,setPw2]=useState(""); const [pwMsg,setPwMsg]=useState(null); const [pwBusy,setPwBusy]=useState(false);
+  const changePw=async()=>{
+    setPwMsg(null);
+    if(pw.length<6){setPwMsg({err:true,text:"Password must be at least 6 characters."});return;}
+    if(pw!==pw2){setPwMsg({err:true,text:"Passwords don't match."});return;}
+    setPwBusy(true);
+    const {error}=await supabase.auth.updateUser({password:pw});
+    setPwBusy(false);
+    if(error){setPwMsg({err:true,text:error.message});return;}
+    setPw("");setPw2("");setPwMsg({err:false,text:"Password updated."});
+  };
+  // Email summary
+  const [emailBusy,setEmailBusy]=useState(false); const [emailMsg,setEmailMsg]=useState(null);
+  const buildSummary=async()=>{
+    const [appointments,reports,insurance,clinics]=await Promise.all([
+      store.get("appointments"),store.get("reports"),store.get("insurance-cards"),store.get("kiv-clinics"),
+    ]);
+    const L=[]; const money=v=>{const n=parseMoney(v);return n>0?`$${Math.round(n).toLocaleString("en-US")}`:"—";};
+    L.push("HEALTHCARE TRACKER — SUMMARY");
+    L.push("Generated "+new Date().toLocaleString("en-US"));
+    L.push("");
+    L.push("APPOINTMENTS ("+(appointments?.length||0)+")");
+    (appointments||[]).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(a=>{
+      L.push(`- ${a.date||"?"} | ${a.category||"—"} / ${a.type||"—"} | ${a.clinic||"—"} | paid ${money(a.paidAmount)} | to pay ${money(a.toPayAmount)} | ${a.insuranceStatus||"—"}${a.notes?` | notes: ${a.notes}`:""}`);
+    });
+    L.push("");
+    L.push("MEDICAL REPORTS ("+(reports?.length||0)+")");
+    (reports||[]).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(r=>{
+      L.push(`- ${r.date||"?"} | ${r.title||"Untitled"} | ${r.category||"—"} / ${r.type||"—"}${r.notes?` | notes: ${r.notes}`:""}`);
+    });
+    L.push("");
+    L.push("INSURANCE ("+(insurance?.length||0)+")");
+    (insurance||[]).forEach(c=>{
+      L.push(`- ${c.insurer||"—"}${c.planName?` (${c.planName})`:""} | ${c.type||"—"} | member ${c.memberId||"—"} | policy ${c.policyNumber||"—"}`);
+    });
+    L.push("");
+    L.push("CLINICS ("+(clinics?.length||0)+")");
+    (clinics||[]).forEach(c=>{
+      L.push(`- ${c.name||"—"} | ${c.category||"—"} / ${c.type||"—"} | ${c.contact||"—"} | ${c.location||"—"}${c.notes?` | notes: ${c.notes}`:""}`);
+    });
+    L.push("");
+    L.push("(Attachments are not included in this summary.)");
+    return L.join("\n");
+  };
+  const emailSummary=async()=>{
+    setEmailBusy(true);setEmailMsg(null);
+    try{
+      const text=await buildSummary();
+      const subject=encodeURIComponent("My Healthcare Tracker summary");
+      const body=encodeURIComponent(text);
+      // mailto has length limits; open a draft in the user's mail client.
+      window.location.href=`mailto:${encodeURIComponent(user||"")}?subject=${subject}&body=${body}`;
+      setEmailMsg({err:false,text:"Opening your email app with the summary drafted…"});
+    }catch(e){ setEmailMsg({err:true,text:"Couldn't build the summary. Please try again."}); }
+    finally{ setEmailBusy(false); }
+  };
+  const copySummary=async()=>{
+    try{ const text=await buildSummary(); await navigator.clipboard.writeText(text); setEmailMsg({err:false,text:"Summary copied to clipboard."}); }
+    catch(e){ setEmailMsg({err:true,text:"Couldn't copy. Try the email option."}); }
+  };
+
+  const Card=({title,desc,children})=>(
+    <div style={{...s.card,padding:"20px 22px",marginBottom:16}}>
+      <div style={{fontSize:14,fontWeight:800,color:C.ink,marginBottom:desc?3:14}}>{title}</div>
+      {desc&&<div style={{fontSize:12.5,color:C.sub,marginBottom:16,lineHeight:1.5}}>{desc}</div>}
+      {children}
+    </div>
+  );
+  const msgStyle=m=>({fontSize:12.5,marginTop:10,color:m.err?C.due:C.accent,fontWeight:600});
+
+  return (
+    <div style={{maxWidth:620}}>
+      <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:-0.4,marginBottom:6}}>Settings</div>
+      <div style={{fontSize:13,color:C.sub,marginBottom:22}}>Signed in as {user}</div>
+
+      <Card title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area. State and city are free text.">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+          <Field label="Country"><SS value={loc.country} onChange={v=>setLoc(p=>({...p,country:v}))} options={COUNTRIES} placeholder="Select country"/></Field>
+          <Field label="State / Province"><SI value={loc.state} onChange={v=>setLoc(p=>({...p,state:v}))} placeholder="e.g. California"/></Field>
+        </div>
+        <Field label="City"><SI value={loc.city} onChange={v=>setLoc(p=>({...p,city:v}))} placeholder="e.g. San Francisco"/></Field>
+        <button onClick={saveLoc} style={s.btn("primary")}>Save location</button>
+        {locSaved&&<span style={{fontSize:12.5,marginLeft:12,color:C.accent,fontWeight:600}}>Saved — searches now scoped to {[loc.city,loc.state,loc.country].filter(Boolean).join(", ")||"nowhere set"}.</span>}
+      </Card>
+
+      <Card title="Change password" desc="Update the password for your account.">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+          <Field label="New password"><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="New password" style={s.input}/></Field>
+          <Field label="Confirm password"><input type="password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="Re-enter password" style={s.input}/></Field>
+        </div>
+        <button onClick={changePw} disabled={pwBusy} style={{...s.btn("primary"),opacity:pwBusy?0.7:1,cursor:pwBusy?"not-allowed":"pointer"}}>{pwBusy?"Updating…":"Update password"}</button>
+        {pwMsg&&<div style={msgStyle(pwMsg)}>{pwMsg.text}</div>}
+      </Card>
+
+      <Card title="Email me a summary" desc="Pulls everything across Appointments, Reports, Insurance, and Clinics into a plain-text summary (attachments not included) and drafts it in your email app. You can also copy it to the clipboard.">
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={emailSummary} disabled={emailBusy} style={{...s.btn("primary"),opacity:emailBusy?0.7:1,cursor:emailBusy?"not-allowed":"pointer"}}>{emailBusy?"Building…":"Email me a summary"}</button>
+          <button onClick={copySummary} style={s.btn("ghost")}>Copy to clipboard</button>
+        </div>
+        {emailMsg&&<div style={msgStyle(emailMsg)}>{emailMsg.text}</div>}
+      </Card>
+    </div>
+  );
+}
+
 // ─── App shell ──────────────────────────────────────────────────────────────────
-const TABS=[{id:"dashboard",label:"Dashboard"},{id:"appointments",label:"Appointments"},{id:"insurance",label:"Insurance"},{id:"clinics",label:"Clinics"},{id:"reports",label:"Reports"}];
+const TABS=[{id:"dashboard",label:"Dashboard"},{id:"appointments",label:"Appointments"},{id:"insurance",label:"Insurance"},{id:"clinics",label:"Clinics"},{id:"reports",label:"Reports"},{id:"settings",label:"Settings"}];
 export default function App(){
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("dashboard");
@@ -1117,6 +1237,7 @@ export default function App(){
         {tab==="reports"&&<ReportsTab/>}
         {tab==="insurance"&&<InsuranceTab/>}
         {tab==="clinics"&&<ClinicsTab/>}
+        {tab==="settings"&&<SettingsTab user={user}/>}
       </div>
     </div>
   );
