@@ -1183,6 +1183,18 @@ const STATES={
   "Singapore":["Singapore"],
   "Hong Kong":["Hong Kong Island","Kowloon","New Territories"],
 };
+// Module-scope so these components aren't recreated each render (which would
+// remount inputs and kick the cursor out while typing).
+const SettingsSection=({title,desc,children,divider=true})=>(
+  <div style={{padding:"22px 0",borderBottom:divider?`1px solid ${C.line}`:"none",textAlign:"left"}}>
+    <div style={{fontSize:14,fontWeight:800,color:C.ink,marginBottom:desc?3:14}}>{title}</div>
+    {desc&&<div style={{fontSize:12.5,color:C.sub,marginBottom:16,lineHeight:1.5,maxWidth:560}}>{desc}</div>}
+    {children}
+  </div>
+);
+const SettingsEditBtn=({onClick})=>(
+  <button onClick={onClick} style={{background:"none",border:`1px solid ${C.line}`,borderRadius:8,padding:"5px 12px",cursor:"pointer",fontFamily:FONT,fontSize:12.5,color:C.sub,fontWeight:600}}>Edit</button>
+);
 function SettingsTab({user}){
   const usingLegacy=isLegacyEmail(user);
   const displayEmail=usingLegacy?"":user; // real email if linked
@@ -1221,8 +1233,9 @@ function SettingsTab({user}){
   // Location
   const parseLoc=()=>{ const p=(SEARCH_LOCATION||"").split(",").map(s=>s.trim()); return {city:p[0]||"",state:p[1]||"",country:p[2]||""}; };
   const [loc,setLoc]=useState(parseLoc());
+  const [savedLoc,setSavedLoc]=useState(SEARCH_LOCATION||"");
   const [locSaved,setLocSaved]=useState(false);
-  const saveLoc=()=>{ const parts=[loc.city,loc.state,loc.country].filter(Boolean); setSearchLocation(parts.join(", ")); setLocSaved(true); setTimeout(()=>setLocSaved(false),2000); };
+  const saveLoc=()=>{ const parts=[loc.city,loc.state,loc.country].filter(Boolean); const joined=parts.join(", "); setSearchLocation(joined); setSavedLoc(joined); setLocSaved(true); setTimeout(()=>setLocSaved(false),2000); };
   const stateOptions=STATES[loc.country];
   // Password
   const [pwOld,setPwOld]=useState(""); const [pw,setPw]=useState(""); const [pw2,setPw2]=useState(""); const [pwMsg,setPwMsg]=useState(null); const [pwBusy,setPwBusy]=useState(false);
@@ -1291,27 +1304,17 @@ function SettingsTab({user}){
   };
 
   const msgStyle=m=>({fontSize:12.5,marginTop:10,color:m.err?C.due:C.accent,fontWeight:600});
-  const Section=({title,desc,children,divider=true})=>(
-    <div style={{padding:"22px 0",borderBottom:divider?`1px solid ${C.line}`:"none",textAlign:"left"}}>
-      <div style={{fontSize:14,fontWeight:800,color:C.ink,marginBottom:desc?3:14}}>{title}</div>
-      {desc&&<div style={{fontSize:12.5,color:C.sub,marginBottom:16,lineHeight:1.5,maxWidth:560}}>{desc}</div>}
-      {children}
-    </div>
-  );
-  const editBtn=onClick=>(
-    <button onClick={onClick} style={{background:"none",border:`1px solid ${C.line}`,borderRadius:8,padding:"5px 12px",cursor:"pointer",fontFamily:FONT,fontSize:12.5,color:C.sub,fontWeight:600}}>Edit</button>
-  );
 
   return (
     <div style={{maxWidth:620,textAlign:"left"}}>
       <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:-0.4,marginBottom:4}}>Settings</div>
       <div style={{fontSize:13,color:C.sub}}>Signed in as {usingLegacy?user.replace(LEGACY_DOMAIN,""):user}</div>
 
-      <Section title="Name" desc="Your name, used to personalize the app.">
+      <SettingsSection title="Name" desc="Your name, used to personalize the app.">
         {!nameEdit?(
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <span style={{fontSize:14,color:name?C.ink:C.faint,fontWeight:name?600:400}}>{name||"No name set"}</span>
-            {editBtn(()=>{setNameMsg(null);setNameEdit(true);})}
+            <SettingsEditBtn onClick={()=>{setNameMsg(null);setNameEdit(true);}}/>
           </div>
         ):(
           <div>
@@ -1323,13 +1326,13 @@ function SettingsTab({user}){
           </div>
         )}
         {nameMsg&&<div style={msgStyle(nameMsg)}>{nameMsg.text}</div>}
-      </Section>
+      </SettingsSection>
 
-      <Section title="Email address" desc={usingLegacy?"Your account isn't linked to a real email yet, so password resets can't be sent. Add your email to secure your account and enable resets.":"Your account is linked to this email, so password resets can be sent here."}>
+      <SettingsSection title="Email address" desc={usingLegacy?"Your account isn't linked to a real email yet, so password resets can't be sent. Add your email to secure your account and enable resets.":"Your account is linked to this email, so password resets can be sent here."}>
         {!emailEdit?(
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <span style={{fontSize:14,color:displayEmail?C.ink:C.faint,fontWeight:displayEmail?600:400}}>{displayEmail||"No email linked"}</span>
-            {editBtn(()=>{setEmailMsg2(null);setEmailNew(displayEmail||"");setEmailEdit(true);})}
+            <SettingsEditBtn onClick={()=>{setEmailMsg2(null);setEmailNew(displayEmail||"");setEmailEdit(true);}}/>
           </div>
         ):(
           <div>
@@ -1341,9 +1344,12 @@ function SettingsTab({user}){
           </div>
         )}
         {emailMsg2&&<div style={msgStyle(emailMsg2)}>{emailMsg2.text}</div>}
-      </Section>
+      </SettingsSection>
 
-      <Section title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area.">
+      <SettingsSection title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area.">
+        <div style={{fontSize:13,color:savedLoc?C.ink:C.faint,fontWeight:savedLoc?600:400,marginBottom:14}}>
+          Current: {savedLoc||"not set"}
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
           <Field label="Country"><SS value={loc.country} onChange={v=>setLoc(p=>({...p,country:v,state:""}))} options={COUNTRIES} placeholder="Select country"/></Field>
           <Field label="State / Province">
@@ -1355,9 +1361,9 @@ function SettingsTab({user}){
         <Field label="City"><SI value={loc.city} onChange={v=>setLoc(p=>({...p,city:v}))} placeholder="e.g. San Francisco"/></Field>
         <button onClick={saveLoc} style={s.btn("primary")}>Save location</button>
         {locSaved&&<span style={{fontSize:12.5,marginLeft:12,color:C.accent,fontWeight:600}}>Saved — searches now scoped to {[loc.city,loc.state,loc.country].filter(Boolean).join(", ")||"nowhere set"}.</span>}
-      </Section>
+      </SettingsSection>
 
-      <Section title="Change password" desc="Confirm your current password, then set a new one.">
+      <SettingsSection title="Change password" desc="Confirm your current password, then set a new one.">
         <Field label="Current password"><input type="password" value={pwOld} onChange={e=>setPwOld(e.target.value)} placeholder="Current password" style={s.input}/></Field>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
           <Field label="New password"><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="New password" style={s.input}/></Field>
@@ -1365,15 +1371,15 @@ function SettingsTab({user}){
         </div>
         <button onClick={changePw} disabled={pwBusy} style={{...s.btn("primary"),opacity:pwBusy?0.7:1,cursor:pwBusy?"not-allowed":"pointer"}}>{pwBusy?"Updating…":"Update password"}</button>
         {pwMsg&&<div style={msgStyle(pwMsg)}>{pwMsg.text}</div>}
-      </Section>
+      </SettingsSection>
 
-      <Section title="Email me a summary" desc="Pulls everything across Appointments, Reports, Insurance, and Clinics into a plain-text summary (attachments not included) and drafts it in your email app. You can also copy it to the clipboard." divider={false}>
+      <SettingsSection title="Email me a summary" desc="Pulls everything across Appointments, Reports, Insurance, and Clinics into a plain-text summary (attachments not included) and drafts it in your email app. You can also copy it to the clipboard." divider={false}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button onClick={emailSummary} disabled={emailBusy} style={{...s.btn("primary"),opacity:emailBusy?0.7:1,cursor:emailBusy?"not-allowed":"pointer"}}>{emailBusy?"Building…":"Email me a summary"}</button>
           <button onClick={copySummary} style={s.btn("ghost")}>Copy to clipboard</button>
         </div>
         {emailMsg&&<div style={msgStyle(emailMsg)}>{emailMsg.text}</div>}
-      </Section>
+      </SettingsSection>
     </div>
   );
 }
