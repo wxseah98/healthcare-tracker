@@ -1086,43 +1086,41 @@ function DashboardTab({onOpenAppt}){
 }
 
 // ─── Login page ─────────────────────────────────────────────────────────────────
-// Accounts may be either a real email OR a legacy username stored as
-// "username@healthtracker.local". If the identifier has no "@", treat it as a
-// legacy username and map it to that synthetic address so existing logins work.
+// Legacy accounts were stored as "username@healthtracker.local". Keep the helper
+// so the app can still recognise/label those, but login is email-based.
 const LEGACY_DOMAIN = "@healthtracker.local";
-const toAuthEmail = id => { const v=(id||"").trim().toLowerCase(); return v.includes("@") ? v : v+LEGACY_DOMAIN; };
 const isLegacyEmail = e => (e||"").toLowerCase().endsWith(LEGACY_DOMAIN);
 function LoginPage({onLogin}){
   const [mode,setMode]=useState("login");
-  const [username,setUsername]=useState(""); const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [confirm,setConfirm]=useState("");
+  const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [confirm,setConfirm]=useState("");
   const [err,setErr]=useState(""); const [loading,setLoading]=useState(false); const [info,setInfo]=useState("");
   const reset=()=>{setErr("");setInfo("");setPassword("");setConfirm("");};
 const doLogin = async () => {
-  if (!username.trim() || !password) { setErr("Enter your username (or email) and password."); return; }
+  if (!email.trim() || !password) { setErr("Enter your email and password."); return; }
   setLoading(true); setErr("");
-  const authEmail = toAuthEmail(username);
+  const authEmail = email.trim().toLowerCase();
   const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
   if (error) { setErr(error.message); setLoading(false); return; }
   onLogin(authEmail);
 };
 const doSignup = async () => {
-  if (!username.trim() || !password) { setErr("Fill in all fields."); return; }
+  if (!email.trim() || !password) { setErr("Fill in all fields."); return; }
+  if (!email.includes("@") || !email.includes(".")) { setErr("Enter a valid email address."); return; }
   if (password.length < 6) { setErr("Password must be at least 6 characters."); return; }
   if (password !== confirm) { setErr("Passwords do not match."); return; }
   setLoading(true); setErr("");
-  // Sign up with the real email if given, otherwise the username maps to a legacy address.
-  const authEmail = email.trim() ? email.trim().toLowerCase() : toAuthEmail(username);
+  const authEmail = email.trim().toLowerCase();
   const { error } = await supabase.auth.signUp({ email: authEmail, password });
   if (error) { setErr(error.message); setLoading(false); return; }
   onLogin(authEmail);
 };
   const go=mode==="login"?doLogin:doSignup;
   const doReset = async () => {
-    const id=username.trim();
-    if (!id) { setErr("Enter your username or email above first, then tap Forgot password."); return; }
-    if (!id.includes("@")) { setErr("Password reset needs a real email. Sign in, then add your email under Settings so resets can be sent."); return; }
+    const id=email.trim().toLowerCase();
+    if (!id) { setErr("Enter your email above first, then tap Forgot password."); return; }
+    if (!id.includes("@")) { setErr("Enter a valid email address to receive a reset link."); return; }
     setLoading(true); setErr("");
-    const { error } = await supabase.auth.resetPasswordForEmail(id.toLowerCase(), { redirectTo: window.location.origin + window.location.pathname });
+    const { error } = await supabase.auth.resetPasswordForEmail(id, { redirectTo: window.location.origin + window.location.pathname });
     setLoading(false);
     if (error) { setErr(error.message); return; }
     setErr(""); setInfo("Check your email for a password reset link. Open it on this device, set a new password, then come back and sign in.");
@@ -1147,13 +1145,9 @@ const doSignup = async () => {
           {err&&<div style={{background:"#FEF2F2",borderRadius:8,padding:"10px 13px",marginBottom:16,fontSize:13,color:C.due}}>{err}</div>}
           {info&&<div style={{background:C.accentSoft,borderRadius:8,padding:"10px 13px",marginBottom:16,fontSize:13,color:C.accent,lineHeight:1.45}}>{info}</div>}
           <div style={{marginBottom:14}}>
-            <label style={s.label}>{mode==="login"?"Username or email":"Username"}</label>
-            <SI value={username} onChange={setUsername} placeholder={mode==="login"?"Username or email":"Choose a username"} autoCapitalize="none" autoCorrect="off" autoComplete="username" spellCheck={false}/>
-          </div>
-          {mode==="signup"&&<div style={{marginBottom:14}}>
-            <label style={s.label}>Email <span style={{textTransform:"none",fontWeight:500,color:C.faint}}>· recommended, for password resets</span></label>
+            <label style={s.label}>Email</label>
             <SI value={email} onChange={setEmail} placeholder="you@example.com" type="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" spellCheck={false}/>
-          </div>}
+          </div>
           <div style={{marginBottom:mode==="signup"?14:22}}>
             <label style={s.label}>Password</label>
             <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter password" style={s.input} onKeyDown={e=>e.key==="Enter"&&go()}/>
@@ -1189,28 +1183,23 @@ const STATES={
   "Singapore":["Singapore"],
   "Hong Kong":["Hong Kong Island","Kowloon","New Territories"],
 };
-// Defined at module scope (not inside SettingsTab) so inputs keep focus while typing.
-const SettingsCard=({title,desc,children})=>(
-  <div style={{...s.card,padding:"20px 22px",marginBottom:16}}>
-    <div style={{fontSize:14,fontWeight:800,color:C.ink,marginBottom:desc?3:14}}>{title}</div>
-    {desc&&<div style={{fontSize:12.5,color:C.sub,marginBottom:16,lineHeight:1.5}}>{desc}</div>}
-    {children}
-  </div>
-);
 function SettingsTab({user}){
   const usingLegacy=isLegacyEmail(user);
+  const displayEmail=usingLegacy?"":user; // real email if linked
   // Name (stored in Supabase user metadata)
-  const [name,setName]=useState(""); const [nameMsg,setNameMsg]=useState(null); const [nameBusy,setNameBusy]=useState(false);
-  useEffect(()=>{ supabase.auth.getUser().then(({data})=>{ setName(data?.user?.user_metadata?.name||""); }); },[]);
+  const [name,setName]=useState(""); const [nameMsg,setNameMsg]=useState(null); const [nameBusy,setNameBusy]=useState(false); const [nameEdit,setNameEdit]=useState(false);
+  useEffect(()=>{ supabase.auth.getUser().then(({data})=>{
+    setName(data?.user?.user_metadata?.name||"");
+  }); },[]);
   const saveName=async()=>{
     setNameMsg(null); setNameBusy(true);
     const {error}=await supabase.auth.updateUser({data:{name:name.trim()}});
     setNameBusy(false);
     if(error){setNameMsg({err:true,text:error.message});return;}
-    setNameMsg({err:false,text:"Name saved."});
+    setNameMsg({err:false,text:"Name saved."}); setNameEdit(false);
   };
   // Email linking
-  const [emailNew,setEmailNew]=useState(""); const [emailMsg2,setEmailMsg2]=useState(null); const [emailBusy2,setEmailBusy2]=useState(false);
+  const [emailNew,setEmailNew]=useState(""); const [emailMsg2,setEmailMsg2]=useState(null); const [emailBusy2,setEmailBusy2]=useState(false); const [emailEdit,setEmailEdit]=useState(false);
   const linkEmail=async()=>{
     setEmailMsg2(null);
     const e=emailNew.trim().toLowerCase();
@@ -1218,8 +1207,16 @@ function SettingsTab({user}){
     setEmailBusy2(true);
     const {error}=await supabase.auth.updateUser({email:e});
     setEmailBusy2(false);
-    if(error){setEmailMsg2({err:true,text:error.message});return;}
-    setEmailMsg2({err:false,text:"Confirmation sent. Open the link in your inbox to finish linking "+e+". Until you confirm, keep signing in with your current username."});
+    if(error){
+      const msg=(error.message||"").toLowerCase();
+      if(msg.includes("healthtracker.local")||msg.includes("invalid")){
+        setEmailMsg2({err:true,text:"Your original username-based address can't be changed from here. Change it in the Supabase dashboard (Authentication → Users), or create a fresh account with your real email."});
+      } else {
+        setEmailMsg2({err:true,text:error.message});
+      }
+      return;
+    }
+    setEmailMsg2({err:false,text:"Confirmation sent. Open the link in your inbox to finish linking "+e+". Until you confirm, keep signing in with your current email."});
   };
   // Location
   const parseLoc=()=>{ const p=(SEARCH_LOCATION||"").split(",").map(s=>s.trim()); return {city:p[0]||"",state:p[1]||"",country:p[2]||""}; };
@@ -1294,26 +1291,59 @@ function SettingsTab({user}){
   };
 
   const msgStyle=m=>({fontSize:12.5,marginTop:10,color:m.err?C.due:C.accent,fontWeight:600});
+  const Section=({title,desc,children,divider=true})=>(
+    <div style={{padding:"22px 0",borderBottom:divider?`1px solid ${C.line}`:"none",textAlign:"left"}}>
+      <div style={{fontSize:14,fontWeight:800,color:C.ink,marginBottom:desc?3:14}}>{title}</div>
+      {desc&&<div style={{fontSize:12.5,color:C.sub,marginBottom:16,lineHeight:1.5,maxWidth:560}}>{desc}</div>}
+      {children}
+    </div>
+  );
+  const editBtn=onClick=>(
+    <button onClick={onClick} style={{background:"none",border:`1px solid ${C.line}`,borderRadius:8,padding:"5px 12px",cursor:"pointer",fontFamily:FONT,fontSize:12.5,color:C.sub,fontWeight:600}}>Edit</button>
+  );
 
   return (
-    <div style={{maxWidth:620}}>
-      <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:-0.4,marginBottom:6}}>Settings</div>
-      <div style={{fontSize:13,color:C.sub,marginBottom:22}}>Signed in as {usingLegacy?user.replace(LEGACY_DOMAIN,""):user}</div>
+    <div style={{maxWidth:620,textAlign:"left"}}>
+      <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:-0.4,marginBottom:4}}>Settings</div>
+      <div style={{fontSize:13,color:C.sub}}>Signed in as {usingLegacy?user.replace(LEGACY_DOMAIN,""):user}</div>
 
-      <SettingsCard title="Name" desc="Your name, used to personalize the app.">
-        <Field label="Full name"><SI value={name} onChange={setName} placeholder="e.g. Jordan Lee"/></Field>
-        <button onClick={saveName} disabled={nameBusy} style={{...s.btn("primary"),opacity:nameBusy?0.7:1,cursor:nameBusy?"not-allowed":"pointer"}}>{nameBusy?"Saving…":"Save name"}</button>
+      <Section title="Name" desc="Your name, used to personalize the app.">
+        {!nameEdit?(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <span style={{fontSize:14,color:name?C.ink:C.faint,fontWeight:name?600:400}}>{name||"No name set"}</span>
+            {editBtn(()=>{setNameMsg(null);setNameEdit(true);})}
+          </div>
+        ):(
+          <div>
+            <Field label="Full name"><SI value={name} onChange={setName} placeholder="e.g. Jordan Lee"/></Field>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={saveName} disabled={nameBusy} style={{...s.btn("primary"),opacity:nameBusy?0.7:1,cursor:nameBusy?"not-allowed":"pointer"}}>{nameBusy?"Saving…":"Save"}</button>
+              <button onClick={()=>setNameEdit(false)} style={s.btn("ghost")}>Cancel</button>
+            </div>
+          </div>
+        )}
         {nameMsg&&<div style={msgStyle(nameMsg)}>{nameMsg.text}</div>}
-      </SettingsCard>
+      </Section>
 
-      <SettingsCard title="Email address" desc={usingLegacy?"Your account isn't linked to a real email yet, so password resets can't be sent. Add your email to secure your account and enable resets.":"Your account is linked to this email, so password resets can be sent here."}>
-        {!usingLegacy&&<div style={{fontSize:13.5,color:C.ink,fontWeight:600,marginBottom:14}}>{user}</div>}
-        <Field label={usingLegacy?"Add your email":"Change email"}><SI value={emailNew} onChange={setEmailNew} placeholder="you@example.com" type="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" spellCheck={false}/></Field>
-        <button onClick={linkEmail} disabled={emailBusy2} style={{...s.btn("primary"),opacity:emailBusy2?0.7:1,cursor:emailBusy2?"not-allowed":"pointer"}}>{emailBusy2?"Sending…":usingLegacy?"Add email":"Update email"}</button>
+      <Section title="Email address" desc={usingLegacy?"Your account isn't linked to a real email yet, so password resets can't be sent. Add your email to secure your account and enable resets.":"Your account is linked to this email, so password resets can be sent here."}>
+        {!emailEdit?(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <span style={{fontSize:14,color:displayEmail?C.ink:C.faint,fontWeight:displayEmail?600:400}}>{displayEmail||"No email linked"}</span>
+            {editBtn(()=>{setEmailMsg2(null);setEmailNew(displayEmail||"");setEmailEdit(true);})}
+          </div>
+        ):(
+          <div>
+            <Field label={usingLegacy?"Add your email":"Change email"}><SI value={emailNew} onChange={setEmailNew} placeholder="you@example.com" type="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" spellCheck={false}/></Field>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={linkEmail} disabled={emailBusy2} style={{...s.btn("primary"),opacity:emailBusy2?0.7:1,cursor:emailBusy2?"not-allowed":"pointer"}}>{emailBusy2?"Sending…":usingLegacy?"Add email":"Update email"}</button>
+              <button onClick={()=>setEmailEdit(false)} style={s.btn("ghost")}>Cancel</button>
+            </div>
+          </div>
+        )}
         {emailMsg2&&<div style={msgStyle(emailMsg2)}>{emailMsg2.text}</div>}
-      </SettingsCard>
+      </Section>
 
-      <SettingsCard title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area.">
+      <Section title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area.">
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
           <Field label="Country"><SS value={loc.country} onChange={v=>setLoc(p=>({...p,country:v,state:""}))} options={COUNTRIES} placeholder="Select country"/></Field>
           <Field label="State / Province">
@@ -1325,9 +1355,9 @@ function SettingsTab({user}){
         <Field label="City"><SI value={loc.city} onChange={v=>setLoc(p=>({...p,city:v}))} placeholder="e.g. San Francisco"/></Field>
         <button onClick={saveLoc} style={s.btn("primary")}>Save location</button>
         {locSaved&&<span style={{fontSize:12.5,marginLeft:12,color:C.accent,fontWeight:600}}>Saved — searches now scoped to {[loc.city,loc.state,loc.country].filter(Boolean).join(", ")||"nowhere set"}.</span>}
-      </SettingsCard>
+      </Section>
 
-      <SettingsCard title="Change password" desc="Confirm your current password, then set a new one.">
+      <Section title="Change password" desc="Confirm your current password, then set a new one.">
         <Field label="Current password"><input type="password" value={pwOld} onChange={e=>setPwOld(e.target.value)} placeholder="Current password" style={s.input}/></Field>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
           <Field label="New password"><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="New password" style={s.input}/></Field>
@@ -1335,15 +1365,15 @@ function SettingsTab({user}){
         </div>
         <button onClick={changePw} disabled={pwBusy} style={{...s.btn("primary"),opacity:pwBusy?0.7:1,cursor:pwBusy?"not-allowed":"pointer"}}>{pwBusy?"Updating…":"Update password"}</button>
         {pwMsg&&<div style={msgStyle(pwMsg)}>{pwMsg.text}</div>}
-      </SettingsCard>
+      </Section>
 
-      <SettingsCard title="Email me a summary" desc="Pulls everything across Appointments, Reports, Insurance, and Clinics into a plain-text summary (attachments not included) and drafts it in your email app. You can also copy it to the clipboard.">
+      <Section title="Email me a summary" desc="Pulls everything across Appointments, Reports, Insurance, and Clinics into a plain-text summary (attachments not included) and drafts it in your email app. You can also copy it to the clipboard." divider={false}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button onClick={emailSummary} disabled={emailBusy} style={{...s.btn("primary"),opacity:emailBusy?0.7:1,cursor:emailBusy?"not-allowed":"pointer"}}>{emailBusy?"Building…":"Email me a summary"}</button>
           <button onClick={copySummary} style={s.btn("ghost")}>Copy to clipboard</button>
         </div>
         {emailMsg&&<div style={msgStyle(emailMsg)}>{emailMsg.text}</div>}
-      </SettingsCard>
+      </Section>
     </div>
   );
 }
