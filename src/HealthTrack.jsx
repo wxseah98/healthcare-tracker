@@ -117,26 +117,37 @@ const CatTag = ({label,color}) => (
 const StatusTag = ({label,color}) => (
   <span style={{display:"inline-flex",alignItems:"center",padding:"2px 9px",borderRadius:4,fontSize:11.5,fontWeight:600,color,background:color+"12",letterSpacing:0.2}}>{label}</span>
 );
-// Icon-based edit/delete menu — a pencil that opens a small popover
+// Icon-based edit/delete menu — popover uses fixed positioning so it floats
+// above the table and is never clipped by the horizontal scroll container.
 function EditMenu({onEdit,onDelete}){
   const [open,setOpen]=useState(false);
-  const ref=useRef(null);
+  const [pos,setPos]=useState({top:0,left:0});
+  const btnRef=useRef(null);
+  const menuRef=useRef(null);
+  const place=()=>{
+    const b=btnRef.current?.getBoundingClientRect();
+    if(b) setPos({top:b.bottom+4,left:b.left});
+  };
   useEffect(()=>{
     if(!open)return;
-    const h=e=>{ if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    window.addEventListener("mousedown",h);
-    return ()=>window.removeEventListener("mousedown",h);
+    const onDown=e=>{ if(!menuRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) setOpen(false); };
+    const onScrollResize=()=>setOpen(false);
+    window.addEventListener("mousedown",onDown);
+    window.addEventListener("scroll",onScrollResize,true);
+    window.addEventListener("resize",onScrollResize);
+    return ()=>{ window.removeEventListener("mousedown",onDown); window.removeEventListener("scroll",onScrollResize,true); window.removeEventListener("resize",onScrollResize); };
   },[open]);
+  const toggle=e=>{ e.stopPropagation(); if(!open) place(); setOpen(o=>!o); };
   return (
-    <div ref={ref} style={{position:"relative",display:"inline-block"}}>
-      <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);}} title="Edit or delete"
+    <>
+      <button ref={btnRef} onClick={toggle} title="Edit or delete"
         style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",borderRadius:6,color:C.faint,display:"flex",alignItems:"center",lineHeight:0}}
         onMouseEnter={e=>{e.currentTarget.style.background=C.lineSoft;e.currentTarget.style.color=C.ink;}}
         onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=C.faint;}}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
       {open&&(
-        <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:C.surface,border:`1px solid ${C.line}`,borderRadius:8,boxShadow:"0 8px 24px rgba(31,27,46,0.12)",zIndex:100,overflow:"hidden",minWidth:120}}>
+        <div ref={menuRef} style={{position:"fixed",top:pos.top,left:pos.left,background:C.surface,border:`1px solid ${C.line}`,borderRadius:8,boxShadow:"0 8px 24px rgba(31,27,46,0.16)",zIndex:1000,overflow:"hidden",minWidth:120}}>
           <button onClick={e=>{e.stopPropagation();setOpen(false);onEdit();}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 13px",background:"none",border:"none",cursor:"pointer",fontFamily:FONT,fontSize:13,color:C.ink,textAlign:"left"}}
             onMouseEnter={e=>e.currentTarget.style.background=C.canvas} onMouseLeave={e=>e.currentTarget.style.background="none"}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -149,7 +160,7 @@ function EditMenu({onEdit,onDelete}){
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 }
 const Field = ({label,required,hint,children}) => (
@@ -286,21 +297,23 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
   const [err,setErr]=useState("");
   const [clinicList,setClinicList]=useState([]);   // saved clinics
   const [pastApts,setPastApts]=useState([]);        // previous appointments
+  const [sugOpen,setSugOpen]=useState(false);       // suggestions dropdown open?
+  const sugRef=useRef(null);
   useEffect(()=>{
     store.get("kiv-clinics").then(d=>{if(d)setClinicList(d);});
     store.get("appointments").then(d=>{if(d)setPastApts(d);});
   },[]);
-  // Build a MECE (deduplicated) clinic suggestion list from both sources,
-  // filtered by the chosen category/type. Match if the source shares the
-  // selected category OR type (when set); if neither is set, show all.
+  useEffect(()=>{
+    if(!sugOpen)return;
+    const h=e=>{ if(sugRef.current && !sugRef.current.contains(e.target)) setSugOpen(false); };
+    window.addEventListener("mousedown",h);
+    return ()=>window.removeEventListener("mousedown",h);
+  },[sugOpen]);
+  // Build a MECE (deduplicated) clinic suggestion list from saved clinics + past
+  // appointments, filtered by the selected TYPE only. If no type is chosen, show all.
   const suggestions=(()=>{
-    const wantCat=f.category, wantType=f.type;
-    const matches=(cat,type)=>{
-      if(!wantCat && !wantType) return true;
-      const catOk = wantCat ? cat===wantCat : false;
-      const typeOk = wantType ? type===wantType : false;
-      return catOk || typeOk;
-    };
+    const wantType=f.type;
+    const matches=type=> !wantType || type===wantType;
     const map=new Map(); // key: lowercased clinic name → {name, contact}
     const add=(name,contact)=>{
       const n=(name||"").trim(); if(!n) return;
@@ -308,11 +321,11 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
       if(!map.has(key)) map.set(key,{name:n,contact:(contact||"").trim()});
       else if(!map.get(key).contact && contact) map.get(key).contact=contact.trim();
     };
-    clinicList.forEach(c=>{ if(matches(c.category,c.type)) add(c.name,c.contact); });
-    pastApts.forEach(a=>{ if(a.id!==f.id && matches(a.category,a.type)) add(a.clinic,a.clinicContact); });
+    clinicList.forEach(c=>{ if(matches(c.type)) add(c.name,c.contact); });
+    pastApts.forEach(a=>{ if(a.id!==f.id && matches(a.type)) add(a.clinic,a.clinicContact); });
     return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
   })();
-  const pickClinic=sug=>setF(p=>({...p,clinic:sug.name,clinicContact:sug.contact||p.clinicContact}));
+  const pickClinic=sug=>{setF(p=>({...p,clinic:sug.name,clinicContact:sug.contact||p.clinicContact}));setSugOpen(false);};
   const handleSave=()=>{if(!f.date){setErr("Appointment date is required.");return;}onSave({...f,id:f.id||uid()});};
   const mapLink=q=>(<a href={mapsUrl(q)} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",padding:"0 12px",background:C.lineSoft,borderRadius:6,textDecoration:"none",fontSize:12,color:C.accent,flexShrink:0,fontWeight:600}}>Map</a>);
   return (
@@ -322,26 +335,36 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
         <Field label="Category"><SS value={f.category} onChange={set("category")} options={CATEGORIES} placeholder="Select category"/></Field>
         <Field label="Type"><SS value={f.type} onChange={set("type")} options={TYPES} placeholder="Select type"/></Field>
         <Field label="Clinic" hint={f.clinic?"Opens in Google Maps":"Map link auto-generates"}>
-          <div style={{display:"flex",gap:6}}><SI value={f.clinic} onChange={set("clinic")} placeholder="Clinic or provider"/>{f.clinic&&mapLink(f.clinic)}</div>
-          {suggestions.length>0&&(
-            <div style={{marginTop:8}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:C.faint,letterSpacing:0.4,textTransform:"uppercase",marginBottom:6}}>
-                {(f.category||f.type)?"Suggested for this category/type":"Your clinics"}
-              </div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          <div ref={sugRef} style={{position:"relative"}}>
+            <div style={{display:"flex",gap:6}}>
+              <SI value={f.clinic} onChange={set("clinic")} placeholder="Clinic or provider"/>
+              {suggestions.length>0&&(
+                <button type="button" onClick={()=>setSugOpen(o=>!o)} title="Suggested clinics"
+                  style={{display:"flex",alignItems:"center",gap:4,padding:"0 12px",background:sugOpen?C.accentSoft:C.lineSoft,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,color:C.accent,flexShrink:0,fontWeight:600,fontFamily:FONT}}>
+                  Suggest <span style={{fontSize:9,transform:sugOpen?"rotate(180deg)":"none",transition:"transform .12s"}}>▾</span>
+                </button>
+              )}
+              {f.clinic&&mapLink(f.clinic)}
+            </div>
+            {sugOpen&&suggestions.length>0&&(
+              <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:C.surface,border:`1px solid ${C.line}`,borderRadius:8,boxShadow:"0 8px 24px rgba(31,27,46,0.16)",zIndex:1000,maxHeight:220,overflowY:"auto"}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.faint,letterSpacing:0.4,textTransform:"uppercase",padding:"8px 12px 4px"}}>
+                  {f.type?`Clinics for ${f.type}`:"Your clinics"}
+                </div>
                 {suggestions.map(sug=>{
                   const active=f.clinic.trim().toLowerCase()===sug.name.toLowerCase();
                   return (
                     <button key={sug.name} type="button" onClick={()=>pickClinic(sug)}
-                      style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:active?600:500,
-                        border:`1px solid ${active?C.accent:C.line}`,background:active?C.accentSoft:C.surface,color:active?C.accent:C.sub,transition:"all .12s"}}>
-                      {sug.name}
+                      style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:1,width:"100%",padding:"8px 12px",background:active?C.accentSoft:"none",border:"none",borderTop:`1px solid ${C.lineSoft}`,cursor:"pointer",fontFamily:FONT,textAlign:"left"}}
+                      onMouseEnter={e=>{if(!active)e.currentTarget.style.background=C.canvas;}} onMouseLeave={e=>{if(!active)e.currentTarget.style.background="none";}}>
+                      <span style={{fontSize:13,fontWeight:active?700:500,color:active?C.accent:C.ink}}>{sug.name}</span>
+                      {sug.contact&&<span style={{fontSize:11.5,color:C.faint}}>{sug.contact}</span>}
                     </button>
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Field>
         <Field label="Clinic contact"><SI value={f.clinicContact} onChange={set("clinicContact")} placeholder="Phone or email"/></Field>
         <Field label="Appointment date" required><SI type="date" value={f.date} onChange={set("date")}/></Field>
@@ -433,7 +456,7 @@ function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap"}}>{fmtMoney(r.toPayAmount)}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
-                <td style={{padding:"9px 12px",textAlign:"left",maxWidth:180}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",maxWidth:320}}>{r.notes?<span style={{fontSize:12.5,color:C.sub,display:"inline-block",maxWidth:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",verticalAlign:"bottom"}} title={r.notes}>{r.notes}</span>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
               </tr>
             );
           })}
