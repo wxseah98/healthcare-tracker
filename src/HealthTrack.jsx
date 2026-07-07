@@ -185,9 +185,10 @@ const Field = ({label,required,hint,children}) => (
     {hint&&<p style={{margin:"5px 0 0",fontSize:11,color:C.faint}}>{hint}</p>}
   </div>
 );
-function SI({value,onChange,placeholder,type="text"}){
+function SI({value,onChange,placeholder,type="text",autoCapitalize,autoCorrect,autoComplete,spellCheck}){
   const [f,setF]=useState(false);
   return <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+    autoCapitalize={autoCapitalize} autoCorrect={autoCorrect} autoComplete={autoComplete} spellCheck={spellCheck}
     style={{...s.input,borderColor:f?C.accent:C.line,boxShadow:f?`0 0 0 3px ${C.accentSoft}`:"none",transition:"border-color .12s,box-shadow .12s"}}
     onFocus={()=>setF(true)} onBlur={()=>setF(false)}/>;
 }
@@ -1085,32 +1086,47 @@ function DashboardTab({onOpenAppt}){
 }
 
 // ─── Login page ─────────────────────────────────────────────────────────────────
+// Accounts may be either a real email OR a legacy username stored as
+// "username@healthtracker.local". If the identifier has no "@", treat it as a
+// legacy username and map it to that synthetic address so existing logins work.
+const LEGACY_DOMAIN = "@healthtracker.local";
+const toAuthEmail = id => { const v=(id||"").trim().toLowerCase(); return v.includes("@") ? v : v+LEGACY_DOMAIN; };
+const isLegacyEmail = e => (e||"").toLowerCase().endsWith(LEGACY_DOMAIN);
 function LoginPage({onLogin}){
   const [mode,setMode]=useState("login");
-  const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [confirm,setConfirm]=useState("");
-  const [err,setErr]=useState(""); const [loading,setLoading]=useState(false);
-  const reset=()=>{setErr("");setPassword("");setConfirm("");};
+  const [username,setUsername]=useState(""); const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [confirm,setConfirm]=useState("");
+  const [err,setErr]=useState(""); const [loading,setLoading]=useState(false); const [info,setInfo]=useState("");
+  const reset=()=>{setErr("");setInfo("");setPassword("");setConfirm("");};
 const doLogin = async () => {
-  if (!username.trim() || !password) { setErr("Enter your email and password."); return; }
+  if (!username.trim() || !password) { setErr("Enter your username (or email) and password."); return; }
   setLoading(true); setErr("");
-  const { error } = await supabase.auth.signInWithPassword({
-    email: username.trim(), password,
-  });
+  const authEmail = toAuthEmail(username);
+  const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
   if (error) { setErr(error.message); setLoading(false); return; }
-  onLogin(username.trim());
+  onLogin(authEmail);
 };
 const doSignup = async () => {
   if (!username.trim() || !password) { setErr("Fill in all fields."); return; }
   if (password.length < 6) { setErr("Password must be at least 6 characters."); return; }
   if (password !== confirm) { setErr("Passwords do not match."); return; }
   setLoading(true); setErr("");
-  const { error } = await supabase.auth.signUp({
-    email: username.trim(), password,
-  });
+  // Sign up with the real email if given, otherwise the username maps to a legacy address.
+  const authEmail = email.trim() ? email.trim().toLowerCase() : toAuthEmail(username);
+  const { error } = await supabase.auth.signUp({ email: authEmail, password });
   if (error) { setErr(error.message); setLoading(false); return; }
-  onLogin(username.trim());
+  onLogin(authEmail);
 };
   const go=mode==="login"?doLogin:doSignup;
+  const doReset = async () => {
+    const id=username.trim();
+    if (!id) { setErr("Enter your username or email above first, then tap Forgot password."); return; }
+    if (!id.includes("@")) { setErr("Password reset needs a real email. Sign in, then add your email under Settings so resets can be sent."); return; }
+    setLoading(true); setErr("");
+    const { error } = await supabase.auth.resetPasswordForEmail(id.toLowerCase(), { redirectTo: window.location.origin + window.location.pathname });
+    setLoading(false);
+    if (error) { setErr(error.message); return; }
+    setErr(""); setInfo("Check your email for a password reset link. Open it on this device, set a new password, then come back and sign in.");
+  };
   return (
     <div style={{minHeight:"100vh",background:C.canvas,display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:FONT}}>
       <div style={{width:"100%",maxWidth:400}}>
@@ -1129,10 +1145,15 @@ const doSignup = async () => {
             ))}
           </div>
           {err&&<div style={{background:"#FEF2F2",borderRadius:8,padding:"10px 13px",marginBottom:16,fontSize:13,color:C.due}}>{err}</div>}
+          {info&&<div style={{background:C.accentSoft,borderRadius:8,padding:"10px 13px",marginBottom:16,fontSize:13,color:C.accent,lineHeight:1.45}}>{info}</div>}
           <div style={{marginBottom:14}}>
-            <label style={s.label}>Username</label>
-            <SI value={username} onChange={setUsername} placeholder="Enter username"/>
+            <label style={s.label}>{mode==="login"?"Username or email":"Username"}</label>
+            <SI value={username} onChange={setUsername} placeholder={mode==="login"?"Username or email":"Choose a username"} autoCapitalize="none" autoCorrect="off" autoComplete="username" spellCheck={false}/>
           </div>
+          {mode==="signup"&&<div style={{marginBottom:14}}>
+            <label style={s.label}>Email <span style={{textTransform:"none",fontWeight:500,color:C.faint}}>· recommended, for password resets</span></label>
+            <SI value={email} onChange={setEmail} placeholder="you@example.com" type="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" spellCheck={false}/>
+          </div>}
           <div style={{marginBottom:mode==="signup"?14:22}}>
             <label style={s.label}>Password</label>
             <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter password" style={s.input} onKeyDown={e=>e.key==="Enter"&&go()}/>
@@ -1142,6 +1163,7 @@ const doSignup = async () => {
             <input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="Re-enter password" style={s.input} onKeyDown={e=>e.key==="Enter"&&go()}/>
           </div>}
           <button onClick={go} disabled={loading} style={{...s.btn("primary"),width:"100%",padding:"12px",fontSize:14,opacity:loading?0.7:1,cursor:loading?"not-allowed":"pointer"}}>{loading?"Please wait":mode==="login"?"Sign in":"Create account"}</button>
+          {mode==="login"&&<button onClick={doReset} disabled={loading} style={{width:"100%",marginTop:12,background:"none",border:"none",cursor:"pointer",fontFamily:FONT,fontSize:12.5,color:C.accent,fontWeight:600}}>Forgot password?</button>}
           {mode==="signup"&&<p style={{margin:"14px 0 0",fontSize:12,color:C.faint,textAlign:"center"}}>Your data is private and tied to your account.</p>}
         </div>
       </div>
@@ -1176,6 +1198,19 @@ const SettingsCard=({title,desc,children})=>(
   </div>
 );
 function SettingsTab({user}){
+  const usingLegacy=isLegacyEmail(user);
+  // Email linking
+  const [emailNew,setEmailNew]=useState(""); const [emailMsg2,setEmailMsg2]=useState(null); const [emailBusy2,setEmailBusy2]=useState(false);
+  const linkEmail=async()=>{
+    setEmailMsg2(null);
+    const e=emailNew.trim().toLowerCase();
+    if(!e||!e.includes("@")||!e.includes(".")){setEmailMsg2({err:true,text:"Enter a valid email address."});return;}
+    setEmailBusy2(true);
+    const {error}=await supabase.auth.updateUser({email:e});
+    setEmailBusy2(false);
+    if(error){setEmailMsg2({err:true,text:error.message});return;}
+    setEmailMsg2({err:false,text:"Confirmation sent. Open the link in your inbox to finish linking "+e+". Until you confirm, keep signing in with your current username."});
+  };
   // Location
   const parseLoc=()=>{ const p=(SEARCH_LOCATION||"").split(",").map(s=>s.trim()); return {city:p[0]||"",state:p[1]||"",country:p[2]||""}; };
   const [loc,setLoc]=useState(parseLoc());
@@ -1253,7 +1288,14 @@ function SettingsTab({user}){
   return (
     <div style={{maxWidth:620}}>
       <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:-0.4,marginBottom:6}}>Settings</div>
-      <div style={{fontSize:13,color:C.sub,marginBottom:22}}>Signed in as {user}</div>
+      <div style={{fontSize:13,color:C.sub,marginBottom:22}}>Signed in as {usingLegacy?user.replace(LEGACY_DOMAIN,""):user}</div>
+
+      <SettingsCard title="Email address" desc={usingLegacy?"Your account isn't linked to a real email yet, so password resets can't be sent. Add your email to secure your account and enable resets.":"Your account is linked to this email, so password resets can be sent here."}>
+        {!usingLegacy&&<div style={{fontSize:13.5,color:C.ink,fontWeight:600,marginBottom:14}}>{user}</div>}
+        <Field label={usingLegacy?"Add your email":"Change email"}><SI value={emailNew} onChange={setEmailNew} placeholder="you@example.com" type="email" autoCapitalize="none" autoCorrect="off" autoComplete="email" spellCheck={false}/></Field>
+        <button onClick={linkEmail} disabled={emailBusy2} style={{...s.btn("primary"),opacity:emailBusy2?0.7:1,cursor:emailBusy2?"not-allowed":"pointer"}}>{emailBusy2?"Sending…":usingLegacy?"Add email":"Update email"}</button>
+        {emailMsg2&&<div style={msgStyle(emailMsg2)}>{emailMsg2.text}</div>}
+      </SettingsCard>
 
       <SettingsCard title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area.">
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
@@ -1322,7 +1364,7 @@ export default function App(){
             <span style={{fontSize:isMobile?14:16,fontWeight:800,letterSpacing:-0.3,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Healthcare Tracker</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:isMobile?8:14,flexShrink:0}}>
-            {!isMobile&&<span style={{fontSize:13,color:C.sub,fontWeight:500}}>{user}</span>}
+            {!isMobile&&<span style={{fontSize:13,color:C.sub,fontWeight:500}}>{isLegacyEmail(user)?user.replace(LEGACY_DOMAIN,""):user}</span>}
             <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${C.line}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:12.5,fontFamily:FONT,fontWeight:600,whiteSpace:"nowrap"}}>Sign out</button>
           </div>
         </div>
