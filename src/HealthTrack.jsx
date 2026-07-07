@@ -730,14 +730,20 @@ function ClinicsTab(){
   const [clinics,setClinics]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
   const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fLoc,setFLoc]=useState("");
   const [collapsed,setCollapsed]=useState({});
+  const [sort,setSort]=useState({key:"name",dir:"asc"});
+  const onSort=key=>setSort(p=>p.key===key?{key,dir:p.dir==="asc"?"desc":"asc"}:{key,dir:"asc"});
+  const sortItems=list=>{
+    const m=sort.dir==="asc"?1:-1;
+    return [...list].sort((a,b)=>{const av=(a[sort.key]||"").toLowerCase(),bv=(b[sort.key]||"").toLowerCase(); if(av<bv)return -1*m; if(av>bv)return 1*m; return 0;});
+  };
   const toggle=cat=>setCollapsed(p=>({...p,[cat]:!p[cat]}));
   useEffect(()=>{store.get("kiv-clinics").then(d=>{if(d)setClinics(d);setLoading(false);});},[]);
   const persist=async u=>{setClinics(u);await store.set("kiv-clinics",u);};
   const handleSave=async c=>{const u=c.id&&clinics.find(x=>x.id===c.id)?clinics.map(x=>x.id===c.id?c:x):[...clinics,c];await persist(u);setModal(null);};
   const confirmDelete=async()=>{await persist(clinics.filter(c=>c.id!==confirm.id));setConfirm(null);};
   const filtered=clinics.filter(c=>fCat==="All"||c.category===fCat).filter(c=>!fType||c.type===fType).filter(c=>!fLoc||c.name?.toLowerCase().includes(fLoc.toLowerCase()));
-  const grouped=CATEGORIES.reduce((a,cat)=>{a[cat]=filtered.filter(c=>c.category===cat);return a;},{});
-  const uncat=filtered.filter(c=>!c.category||!CATEGORIES.includes(c.category));
+  const grouped=CATEGORIES.reduce((a,cat)=>{a[cat]=sortItems(filtered.filter(c=>c.category===cat));return a;},{});
+  const uncat=sortItems(filtered.filter(c=>!c.category||!CATEGORIES.includes(c.category)));
   const anyResult=filtered.length>0;
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
   const Group=({cat,label,color,tint,items})=>items.length>0&&(
@@ -750,9 +756,15 @@ function ClinicsTab(){
         </div>
         {!collapsed[cat]&&(
           <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,padding:"0 16px 8px 16px"}}>
-            {["","Clinic","Type","Contact","Notes"].map((h,i)=>(
-              <div key={i} style={{fontSize:10,fontWeight:700,color:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:0.6,textAlign:"left"}}>{h}</div>
-            ))}
+            {[{h:"",k:null},{h:"Clinic",k:"name"},{h:"Type",k:"type"},{h:"Contact",k:null},{h:"Notes",k:null}].map((col,i)=>{
+              const active=col.k&&sort.key===col.k;
+              return (
+                <div key={i} onClick={col.k?()=>onSort(col.k):undefined}
+                  style={{fontSize:10,fontWeight:700,color:active?C.accent:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:active?1:0.6,textAlign:"left",cursor:col.k?"pointer":"default",userSelect:"none"}}>
+                  {col.h}{active&&<span style={{fontSize:8,marginLeft:3}}>{sort.dir==="asc"?"▲":"▼"}</span>}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
