@@ -908,8 +908,15 @@ function ReportsTab(){
 // ─── Dashboard tab ──────────────────────────────────────────────────────────────
 function DashboardTab({onOpenAppt}){
   const [apts,setApts]=useState([]); const [loading,setLoading]=useState(true);
-  const year=new Date().getFullYear().toString(); const today=new Date().toISOString().slice(0,10);
+  const today=new Date().toISOString().slice(0,10);
+  const [year,setYear]=useState(new Date().getFullYear().toString());
   useEffect(()=>{store.get("appointments").then(d=>{if(d)setApts(d);setLoading(false);});},[]);
+  // Years that have data, plus the current year, newest first — for the toggle
+  const yearOptions=(()=>{
+    const set=new Set(apts.map(a=>a.date?.slice(0,4)).filter(Boolean));
+    set.add(new Date().getFullYear().toString());
+    return [...set].sort((a,b)=>b.localeCompare(a));
+  })();
   const thisYear=apts.filter(a=>a.date?.startsWith(year));
   const totalPaid=thisYear.reduce((s,a)=>s+parseMoney(a.paidAmount),0);
   const totalToPay=thisYear.reduce((s,a)=>s+parseMoney(a.toPayAmount),0);
@@ -962,11 +969,22 @@ function DashboardTab({onOpenAppt}){
 
   return (
     <div>
-      <div style={{fontSize:12.5,color:C.faint,marginBottom:18}}>Year in review · <span style={{color:C.accent,fontWeight:700}}>{year}</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:18}}>
+        <span style={{fontSize:12.5,color:C.faint}}>Year in review</span>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {yearOptions.map(y=>{
+            const active=y===year;
+            return (
+              <button key={y} onClick={()=>setYear(y)} style={{padding:"5px 13px",borderRadius:20,cursor:"pointer",fontFamily:FONT,fontSize:12.5,fontWeight:active?700:500,
+                border:`1px solid ${active?C.accent:C.line}`,background:active?C.accent:C.surface,color:active?"#fff":C.sub,transition:"all .12s"}}>{y}</button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Row 1 — visits by category; total lives in the title */}
       <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:14}}>
-        <span style={{fontSize:15,fontWeight:800,color:C.ink,letterSpacing:-0.3}}>{visits} {visits===1?"visit":"visits"} this year</span>
+        <span style={{fontSize:15,fontWeight:800,color:C.ink,letterSpacing:-0.3}}>{visits} {visits===1?"visit":"visits"} in {year}</span>
         <span style={{fontSize:12,color:C.faint}}>by category</span>
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:24}}>
