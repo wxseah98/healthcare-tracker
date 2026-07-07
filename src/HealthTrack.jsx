@@ -242,6 +242,49 @@ function Modal({title,onClose,children,wide}){
     </div>
   );
 }
+// In-app receipt preview — renders images inline and PDFs in an iframe, with
+// tabs when there are multiple files. Avoids the about:blank / download issue
+// that happens when opening large base64 data URLs in a new tab.
+function ReceiptViewer({files,onClose}){
+  const [idx,setIdx]=useState(0);
+  useEffect(()=>{const esc=e=>e.key==="Escape"&&onClose();window.addEventListener("keydown",esc);return()=>window.removeEventListener("keydown",esc);},[]);
+  const file=files[idx]||files[0];
+  const isPdf=(file?.name||"").toLowerCase().endsWith(".pdf")||String(file?.data||"").startsWith("data:application/pdf");
+  const isImg=/^data:image\//.test(file?.data||"")||/\.(png|jpe?g|gif|webp|heic)$/i.test(file?.name||"");
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(24,24,27,0.55)",backdropFilter:"blur(2px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:16}}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:C.surface,borderRadius:12,width:"100%",maxWidth:820,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 50px rgba(0,0,0,0.2)",border:`1px solid ${C.line}`,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.lineSoft}`,gap:12}}>
+          <div style={{minWidth:0}}>
+            <h2 style={{margin:0,fontSize:15,fontWeight:700,color:C.ink,letterSpacing:-0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file?.name||"Receipt"}</h2>
+            {files.length>1&&<div style={{fontSize:11.5,color:C.faint,marginTop:2}}>{idx+1} of {files.length}</div>}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+            <a href={file?.data} download={file?.name} style={{fontSize:12,color:C.accent,textDecoration:"none",fontWeight:600,padding:"6px 10px",borderRadius:6,border:`1px solid ${C.line}`}}>Download</a>
+            <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.faint,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.lineSoft} onMouseLeave={e=>e.currentTarget.style.background="none"}>✕</button>
+          </div>
+        </div>
+        {files.length>1&&(
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",padding:"10px 20px",borderBottom:`1px solid ${C.lineSoft}`}}>
+            {files.map((fl,i)=>(
+              <button key={i} onClick={()=>setIdx(i)} style={{padding:"5px 11px",borderRadius:20,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:i===idx?600:500,
+                border:`1px solid ${i===idx?C.accent:C.line}`,background:i===idx?C.accentSoft:C.surface,color:i===idx?C.accent:C.sub}}>{fl.name?.length>18?fl.name.slice(0,16)+"…":fl.name||`File ${i+1}`}</button>
+            ))}
+          </div>
+        )}
+        <div style={{flex:1,overflow:"auto",background:C.canvas,display:"flex",alignItems:"center",justifyContent:"center",padding:16,minHeight:320}}>
+          {isImg
+            ?<img src={file?.data} alt={file?.name} style={{maxWidth:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:6,boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}/>
+            :isPdf
+              ?<iframe title={file?.name} src={file?.data} style={{width:"100%",height:"70vh",border:"none",borderRadius:6,background:"#fff"}}/>
+              :<div style={{textAlign:"center",color:C.sub,fontSize:13.5}}>Can't preview this file type.<br/><a href={file?.data} download={file?.name} style={{color:C.accent,fontWeight:600,textDecoration:"none"}}>Download {file?.name}</a> to view it.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
 function ConfirmModal({message,onConfirm,onCancel}){
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(24,24,27,0.4)",backdropFilter:"blur(2px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}}>
@@ -408,7 +451,7 @@ const RT_COLS=[
   {key:"next",label:"Next Appointment",sort:"next"},
   {key:"notes",label:"Notes",sort:null},
 ];
-function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
+function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort,onViewReceipts}){
   return (
     <div style={{border:`1px solid ${C.line}`,borderRadius:10,overflow:"visible",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
       <div style={{overflowX:"auto",borderRadius:10}}>
@@ -451,7 +494,7 @@ function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
                 </td>
                 <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>
                   <div style={{fontSize:13,color:C.ink,fontWeight:parseMoney(r.paidAmount)>0?600:400}}>{fmtMoney(r.paidAmount)}</div>
-                  {r.receipts?.length>0&&<a href={r.receipts[0].data} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600}}>View receipt{r.receipts.length>1?`s (${r.receipts.length})`:""}</a>}
+                  {r.receipts?.length>0&&<button onClick={()=>onViewReceipts&&onViewReceipts(r.receipts)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:C.accent,fontWeight:600,fontFamily:FONT}}>View receipt{r.receipts.length>1?`s (${r.receipts.length})`:""}</button>}
                 </td>
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap"}}>{fmtMoney(r.toPayAmount)}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
@@ -489,7 +532,7 @@ function sortRecords(list,sortBy,dir){
 }
 function AppointmentsTab(){
   const [apts,setApts]=useState([]); const [loading,setLoading]=useState(true);
-  const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
+  const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null); const [viewReceipts,setViewReceipts]=useState(null);
   const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fYear,setFYear]=useState(""); const [fMonth,setFMonth]=useState(""); const [fIns,setFIns]=useState(""); const [fClinic,setFClinic]=useState("");
   const [sortBy,setSortBy]=useState("date"); const [dir,setDir]=useState("desc");
   const onSort=key=>{ if(sortBy===key){setDir(d=>d==="asc"?"desc":"asc");} else {setSortBy(key);setDir(key==="date"?"desc":"asc");} };
@@ -532,7 +575,7 @@ function AppointmentsTab(){
       </div>
       {rows.length===0
         ?<div style={{...s.card,fontSize:13,color:C.faint,padding:"18px 18px"}}>{title==="Upcoming appointments"?"Nothing upcoming.":"Nothing completed yet."}</div>
-        :<RecordsTable records={rows} sortBy={sortBy} dir={dir} onSort={onSort} onEdit={a=>setModal(a)} onDelete={id=>setConfirm({id,message:"Delete this appointment?"})}/>}
+        :<RecordsTable records={rows} sortBy={sortBy} dir={dir} onSort={onSort} onEdit={a=>setModal(a)} onDelete={id=>setConfirm({id,message:"Delete this appointment?"})} onViewReceipts={setViewReceipts}/>}
     </div>
   );
   return (
@@ -554,6 +597,7 @@ function AppointmentsTab(){
         :<><Section title="Upcoming appointments" rows={upcoming} accent={C.blue}/><Section title="Completed appointments" rows={completed} accent={C.accent}/></>}
       {modal&&<AppointmentModal appt={modal==="new"?null:modal} onSave={handleSave} onClose={()=>setModal(null)}/>}
       {confirm&&<ConfirmModal message={confirm.message} onConfirm={confirmDelete} onCancel={()=>setConfirm(null)}/>}
+      {viewReceipts&&<ReceiptViewer files={viewReceipts} onClose={()=>setViewReceipts(null)}/>}
     </div>
   );
 }
@@ -903,7 +947,7 @@ function DashboardTab({onOpenAppt}){
           <div style={{fontSize:11,fontWeight:700,color:C.pending,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Pending insurance claims</div>
           {pending.length===0?<p style={{fontSize:13,color:C.faint,margin:0}}>Nothing pending.</p>
             :<div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",width:"100%"}}>
-              <thead><tr>{["Category","Type","Clinic","Date","Amount",""].map(h=><th key={h} style={miniTh}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Category","Type","Clinic","Date","To pay",""].map(h=><th key={h} style={miniTh}>{h}</th>)}</tr></thead>
               <tbody>
                 {pending.map((a,i)=>(
                   <tr key={a.id} style={{borderTop:`1px solid ${C.lineSoft}`}}>
