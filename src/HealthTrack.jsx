@@ -1199,6 +1199,16 @@ const SettingsCard=({title,desc,children})=>(
 );
 function SettingsTab({user}){
   const usingLegacy=isLegacyEmail(user);
+  // Name (stored in Supabase user metadata)
+  const [name,setName]=useState(""); const [nameMsg,setNameMsg]=useState(null); const [nameBusy,setNameBusy]=useState(false);
+  useEffect(()=>{ supabase.auth.getUser().then(({data})=>{ setName(data?.user?.user_metadata?.name||""); }); },[]);
+  const saveName=async()=>{
+    setNameMsg(null); setNameBusy(true);
+    const {error}=await supabase.auth.updateUser({data:{name:name.trim()}});
+    setNameBusy(false);
+    if(error){setNameMsg({err:true,text:error.message});return;}
+    setNameMsg({err:false,text:"Name saved."});
+  };
   // Email linking
   const [emailNew,setEmailNew]=useState(""); const [emailMsg2,setEmailMsg2]=useState(null); const [emailBusy2,setEmailBusy2]=useState(false);
   const linkEmail=async()=>{
@@ -1289,6 +1299,12 @@ function SettingsTab({user}){
     <div style={{maxWidth:620}}>
       <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:-0.4,marginBottom:6}}>Settings</div>
       <div style={{fontSize:13,color:C.sub,marginBottom:22}}>Signed in as {usingLegacy?user.replace(LEGACY_DOMAIN,""):user}</div>
+
+      <SettingsCard title="Name" desc="Your name, used to personalize the app.">
+        <Field label="Full name"><SI value={name} onChange={setName} placeholder="e.g. Jordan Lee"/></Field>
+        <button onClick={saveName} disabled={nameBusy} style={{...s.btn("primary"),opacity:nameBusy?0.7:1,cursor:nameBusy?"not-allowed":"pointer"}}>{nameBusy?"Saving…":"Save name"}</button>
+        {nameMsg&&<div style={msgStyle(nameMsg)}>{nameMsg.text}</div>}
+      </SettingsCard>
 
       <SettingsCard title="Email address" desc={usingLegacy?"Your account isn't linked to a real email yet, so password resets can't be sent. Add your email to secure your account and enable resets.":"Your account is linked to this email, so password resets can be sent here."}>
         {!usingLegacy&&<div style={{fontSize:13.5,color:C.ink,fontWeight:600,marginBottom:14}}>{user}</div>}
