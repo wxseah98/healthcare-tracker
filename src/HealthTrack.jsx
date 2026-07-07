@@ -717,7 +717,10 @@ function ClinicRow({clinic,color,last,onEdit,onDelete}){
       <div style={{display:"flex",justifyContent:"flex-start"}}>
         <EditMenu onEdit={onEdit} onDelete={onDelete}/>
       </div>
-      <div style={{minWidth:0,textAlign:"left",fontSize:13.5,fontWeight:700,color:color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.name}</div>
+      <div style={{minWidth:0,textAlign:"left",display:"flex",alignItems:"center",gap:6}}>
+        <span style={{fontSize:13.5,fontWeight:700,color:color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.name}</span>
+        {clinic.name&&<a href={mapsUrl(clinic.location||clinic.name)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a>}
+      </div>
       <div style={{minWidth:0,textAlign:"left",fontSize:13,color:clinic.type?C.sub:C.faint,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.type||"—"}</div>
       <div style={{fontSize:13,color:C.sub,minWidth:0,textAlign:"left",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{clinic.contact||<span style={{color:C.faint}}>—</span>}</div>
       <div style={{fontSize:13,color:C.sub,minWidth:0,textAlign:"left",display:"flex",alignItems:"center",gap:6}}>
