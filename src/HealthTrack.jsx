@@ -279,11 +279,40 @@ const SectionHead = ({children,right}) => (
 );
 
 // ─── Appointment modal ──────────────────────────────────────────────────────────
-const BLANK_APT = {id:"",category:"",type:"",clinic:"",clinicContact:"",date:"",paidAmount:"",toPayAmount:"",paid:false,receipts:[],insuranceStatus:"",eobs:[],notes:"",nextAppointmentDate:""};
+const BLANK_APT = {id:"",category:"",type:"",clinic:"",clinicContact:"",date:"",paidAmount:"",toPayAmount:"",paid:false,receipts:[],insuranceStatus:"Pending",eobs:[],notes:"",nextAppointmentDate:""};
 function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
   const [f,setF]=useState({...BLANK_APT,...(appt||{})});
   const set=k=>v=>setF(p=>({...p,[k]:v}));
   const [err,setErr]=useState("");
+  const [clinicList,setClinicList]=useState([]);   // saved clinics
+  const [pastApts,setPastApts]=useState([]);        // previous appointments
+  useEffect(()=>{
+    store.get("kiv-clinics").then(d=>{if(d)setClinicList(d);});
+    store.get("appointments").then(d=>{if(d)setPastApts(d);});
+  },[]);
+  // Build a MECE (deduplicated) clinic suggestion list from both sources,
+  // filtered by the chosen category/type. Match if the source shares the
+  // selected category OR type (when set); if neither is set, show all.
+  const suggestions=(()=>{
+    const wantCat=f.category, wantType=f.type;
+    const matches=(cat,type)=>{
+      if(!wantCat && !wantType) return true;
+      const catOk = wantCat ? cat===wantCat : false;
+      const typeOk = wantType ? type===wantType : false;
+      return catOk || typeOk;
+    };
+    const map=new Map(); // key: lowercased clinic name → {name, contact}
+    const add=(name,contact)=>{
+      const n=(name||"").trim(); if(!n) return;
+      const key=n.toLowerCase();
+      if(!map.has(key)) map.set(key,{name:n,contact:(contact||"").trim()});
+      else if(!map.get(key).contact && contact) map.get(key).contact=contact.trim();
+    };
+    clinicList.forEach(c=>{ if(matches(c.category,c.type)) add(c.name,c.contact); });
+    pastApts.forEach(a=>{ if(a.id!==f.id && matches(a.category,a.type)) add(a.clinic,a.clinicContact); });
+    return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  })();
+  const pickClinic=sug=>setF(p=>({...p,clinic:sug.name,clinicContact:sug.contact||p.clinicContact}));
   const handleSave=()=>{if(!f.date){setErr("Appointment date is required.");return;}onSave({...f,id:f.id||uid()});};
   const mapLink=q=>(<a href={mapsUrl(q)} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",padding:"0 12px",background:C.lineSoft,borderRadius:6,textDecoration:"none",fontSize:12,color:C.accent,flexShrink:0,fontWeight:600}}>Map</a>);
   return (
@@ -294,6 +323,25 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
         <Field label="Type"><SS value={f.type} onChange={set("type")} options={TYPES} placeholder="Select type"/></Field>
         <Field label="Clinic" hint={f.clinic?"Opens in Google Maps":"Map link auto-generates"}>
           <div style={{display:"flex",gap:6}}><SI value={f.clinic} onChange={set("clinic")} placeholder="Clinic or provider"/>{f.clinic&&mapLink(f.clinic)}</div>
+          {suggestions.length>0&&(
+            <div style={{marginTop:8}}>
+              <div style={{fontSize:10.5,fontWeight:700,color:C.faint,letterSpacing:0.4,textTransform:"uppercase",marginBottom:6}}>
+                {(f.category||f.type)?"Suggested for this category/type":"Your clinics"}
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {suggestions.map(sug=>{
+                  const active=f.clinic.trim().toLowerCase()===sug.name.toLowerCase();
+                  return (
+                    <button key={sug.name} type="button" onClick={()=>pickClinic(sug)}
+                      style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:active?600:500,
+                        border:`1px solid ${active?C.accent:C.line}`,background:active?C.accentSoft:C.surface,color:active?C.accent:C.sub,transition:"all .12s"}}>
+                      {sug.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </Field>
         <Field label="Clinic contact"><SI value={f.clinicContact} onChange={set("clinicContact")} placeholder="Phone or email"/></Field>
         <Field label="Appointment date" required><SI type="date" value={f.date} onChange={set("date")}/></Field>
@@ -378,7 +426,10 @@ function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort}){
                     <a href={mapsUrl(r.clinic)} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600,flexShrink:0}}>Map</a>
                   </div>:<span style={{color:C.faint,fontSize:13}}>—</span>}
                 </td>
-                <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,fontWeight:parseMoney(r.paidAmount)>0?600:400,whiteSpace:"nowrap"}}>{fmtMoney(r.paidAmount)}</td>
+                <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>
+                  <div style={{fontSize:13,color:C.ink,fontWeight:parseMoney(r.paidAmount)>0?600:400}}>{fmtMoney(r.paidAmount)}</div>
+                  {r.receipts?.length>0&&<a href={r.receipts[0].data} target="_blank" rel="noreferrer" style={{fontSize:11,color:C.accent,textDecoration:"none",fontWeight:600}}>View receipt{r.receipts.length>1?`s (${r.receipts.length})`:""}</a>}
+                </td>
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.ink,fontWeight:parseMoney(r.toPayAmount)>0?600:400,whiteSpace:"nowrap"}}>{fmtMoney(r.toPayAmount)}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",whiteSpace:"nowrap"}}>{r.insuranceStatus&&ic?<StatusTag label={r.insuranceStatus} color={ic}/>:<span style={{color:C.faint,fontSize:13}}>—</span>}</td>
                 <td style={{padding:"9px 12px",textAlign:"left",fontSize:13,color:C.sub,whiteSpace:"nowrap"}}>{r.nextAppointmentDate?fmtShort(r.nextAppointmentDate):<span style={{color:C.faint}}>—</span>}</td>
@@ -416,16 +467,36 @@ function sortRecords(list,sortBy,dir){
 function AppointmentsTab(){
   const [apts,setApts]=useState([]); const [loading,setLoading]=useState(true);
   const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
-  const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fYear,setFYear]=useState(""); const [fMonth,setFMonth]=useState(""); const [fIns,setFIns]=useState("");
+  const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fYear,setFYear]=useState(""); const [fMonth,setFMonth]=useState(""); const [fIns,setFIns]=useState(""); const [fClinic,setFClinic]=useState("");
   const [sortBy,setSortBy]=useState("date"); const [dir,setDir]=useState("desc");
   const onSort=key=>{ if(sortBy===key){setDir(d=>d==="asc"?"desc":"asc");} else {setSortBy(key);setDir(key==="date"?"desc":"asc");} };
   useEffect(()=>{store.get("appointments").then(d=>{if(d)setApts(d);setLoading(false);});},[]);
   const persist=async u=>{setApts(u);await store.set("appointments",u);};
-  const handleSave=async a=>{const u=a.id&&apts.find(x=>x.id===a.id)?apts.map(x=>x.id===a.id?a:x):[...apts,a];await persist(u);setModal(null);};
+  const handleSave=async a=>{
+    // Upsert the appointment being saved
+    let u=a.id&&apts.find(x=>x.id===a.id)?apts.map(x=>x.id===a.id?a:x):[...apts,a];
+    // If a next-appointment date is set, spawn a follow-up appointment on that date
+    // (same clinic/category/type), unless a matching one already exists.
+    if(a.nextAppointmentDate){
+      const dup=u.some(x=>x.date===a.nextAppointmentDate && (x.clinic||"")===(a.clinic||"") && (x.type||"")===(a.type||"") && (x.category||"")===(a.category||""));
+      if(!dup){
+        const followUp={
+          ...BLANK_APT,
+          id:uid(),
+          category:a.category, type:a.type, clinic:a.clinic, clinicContact:a.clinicContact,
+          date:a.nextAppointmentDate,
+          insuranceStatus:"Pending",
+          notes:"Follow-up scheduled from "+(a.date?fmtDate(a.date):"a previous visit"),
+        };
+        u=[...u,followUp];
+      }
+    }
+    await persist(u);setModal(null);
+  };
   const confirmDelete=async()=>{await persist(apts.filter(a=>a.id!==confirm.id));setConfirm(null);};
-  const hasF=fType||fYear||fMonth||fIns; const years=getYears(apts);
+  const hasF=fType||fYear||fMonth||fIns||fClinic; const years=getYears(apts);
   const today=new Date().toISOString().slice(0,10);
-  const filtered=apts.filter(a=>fCat==="All"||a.category===fCat).filter(a=>!fType||a.type===fType).filter(a=>!fYear||a.date?.startsWith(fYear)).filter(a=>!fMonth||a.date?.slice(5,7)===fMonth).filter(a=>!fIns||a.insuranceStatus===fIns);
+  const filtered=apts.filter(a=>fCat==="All"||a.category===fCat).filter(a=>!fType||a.type===fType).filter(a=>!fYear||a.date?.startsWith(fYear)).filter(a=>!fMonth||a.date?.slice(5,7)===fMonth).filter(a=>!fIns||a.insuranceStatus===fIns).filter(a=>!fClinic||a.clinic?.toLowerCase().includes(fClinic.toLowerCase()));
   const upcoming=sortRecords(filtered.filter(a=>(a.date||"")>=today),sortBy,dir);
   const completed=sortRecords(filtered.filter(a=>(a.date||"")<today),sortBy,dir);
   if(loading)return <div style={{textAlign:"center",padding:48,color:C.faint}}>Loading</div>;
@@ -446,8 +517,10 @@ function AppointmentsTab(){
       <div style={{marginBottom:16}}>
         <CategoryPills value={fCat} onChange={setFCat}/>
       </div>
-      <FilterBar filters={hasF} onClear={()=>{setFType("");setFYear("");setFMonth("");setFIns("");}}
+      <FilterBar filters={hasF} onClear={()=>{setFType("");setFYear("");setFMonth("");setFIns("");setFClinic("");}}
         action={<button onClick={()=>setModal("new")} style={s.btn("primary")}>+ New appointment</button>}>
+        <input value={fClinic} onChange={e=>setFClinic(e.target.value)} placeholder="Search clinic"
+          style={{padding:"6px 11px",fontSize:12.5,fontFamily:FONT,border:`1px solid ${fClinic?C.accent:C.line}`,background:C.surface,color:C.ink,width:170,borderRadius:6,outline:"none"}}/>
         <FilterSelect value={fType} onChange={setFType} options={TYPES} placeholder="All types" minWidth={130}/>
         <FilterSelect value={fYear} onChange={setFYear} options={years} placeholder="All years" minWidth={90}/>
         <FilterSelect value={fMonth} onChange={setFMonth} options={MONTHS} placeholder="All months" minWidth={110}/>
