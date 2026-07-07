@@ -1,6 +1,17 @@
 import { supabase } from "./supabaseClient";
 import { useState, useEffect, useRef } from "react";
 
+// Responsive hook — true when the viewport is phone-sized.
+function useIsMobile(bp=640){
+  const [m,setM]=useState(typeof window!=="undefined"?window.innerWidth<=bp:false);
+  useEffect(()=>{
+    const on=()=>setM(window.innerWidth<=bp);
+    window.addEventListener("resize",on); on();
+    return ()=>window.removeEventListener("resize",on);
+  },[bp]);
+  return m;
+}
+
 // Map the app's storage keys to Supabase table names
 const TABLE = {
   "appointments": "appointments",
@@ -232,17 +243,18 @@ function FileUpload({files=[],onUpload,onRemove,label}){
   );
 }
 function Modal({title,onClose,children,wide}){
+  const isMobile=useIsMobile();
   useEffect(()=>{const esc=e=>e.key==="Escape"&&onClose();window.addEventListener("keydown",esc);return()=>window.removeEventListener("keydown",esc);},[]);
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(24,24,27,0.4)",backdropFilter:"blur(2px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}}
+    <div style={{position:"fixed",inset:0,background:"rgba(24,24,27,0.4)",backdropFilter:"blur(2px)",display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",zIndex:1000,padding:isMobile?0:16}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:C.surface,borderRadius:12,width:"100%",maxWidth:wide?720:520,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,0.15)",border:`1px solid ${C.line}`}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 24px",borderBottom:`1px solid ${C.lineSoft}`,position:"sticky",top:0,background:C.surface,zIndex:1}}>
+      <div style={{background:C.surface,borderRadius:isMobile?"16px 16px 0 0":12,width:"100%",maxWidth:wide?720:520,maxHeight:isMobile?"94vh":"92vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,0.15)",border:`1px solid ${C.line}`}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:isMobile?"16px 18px":"18px 24px",borderBottom:`1px solid ${C.lineSoft}`,position:"sticky",top:0,background:C.surface,zIndex:1}}>
           <h2 style={{margin:0,fontSize:16,fontWeight:700,color:C.ink,letterSpacing:-0.2}}>{title}</h2>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.faint,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}
             onMouseEnter={e=>e.currentTarget.style.background=C.lineSoft} onMouseLeave={e=>e.currentTarget.style.background="none"}>✕</button>
         </div>
-        <div style={{padding:"22px 24px"}}>{children}</div>
+        <div style={{padding:isMobile?"18px":"22px 24px"}}>{children}</div>
       </div>
     </div>
   );
@@ -379,7 +391,7 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
   return (
     <Modal title={titleOverride||(f.id?"Edit appointment":"New appointment")} onClose={onClose} wide>
       {err&&<div style={{background:"#FEF2F2",borderRadius:6,padding:"9px 12px",marginBottom:16,fontSize:13,color:C.due}}>{err}</div>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
         <Field label="Category"><SS value={f.category} onChange={set("category")} options={CATEGORIES} placeholder="Select category"/></Field>
         <Field label="Type"><SS value={f.type} onChange={set("type")} options={TYPES} placeholder="Select type"/></Field>
         <Field label="Clinic" hint={f.clinic?"Opens in Google Maps":"Map link auto-generates"}>
@@ -422,7 +434,7 @@ function AppointmentModal({appt,onSave,onClose,titleOverride,saveLabel}){
         <Field label="Insurance status"><SS value={f.insuranceStatus} onChange={set("insuranceStatus")} options={INS_STATUSES} placeholder="Select status"/></Field>
         <div/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
         <Field label="Payment">
           <label style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer",fontSize:13.5,color:C.sub,padding:"9px 12px",border:`1px solid ${C.line}`,borderRadius:6,marginBottom:8,background:C.canvas}}>
             <input type="checkbox" checked={f.paid} onChange={e=>set("paid")(e.target.checked)} style={{width:15,height:15,accentColor:C.paid,cursor:"pointer"}}/>Mark as paid
@@ -459,7 +471,7 @@ const RT_COLS=[
 function RecordsTable({records,onEdit,onDelete,sortBy,dir,onSort,onViewReceipts}){
   return (
     <div style={{border:`1px solid ${C.line}`,borderRadius:10,overflow:"visible",background:C.surface,boxShadow:"0 1px 2px rgba(31,27,46,0.03)"}}>
-      <div style={{overflowX:"auto",borderRadius:10}}>
+      <div style={{overflowX:"auto",borderRadius:10,WebkitOverflowScrolling:"touch"}}>
         <table style={{width:"100%",borderCollapse:"collapse",minWidth:980}}>
           <thead>
             <tr style={{background:C.tintBg,borderBottom:`1px solid ${C.line}`}}>
@@ -615,7 +627,7 @@ function InsuranceCardModal({card,onSave,onClose}){
   return (
     <Modal title={f.id?"Edit insurance":"Add insurance"} onClose={onClose} wide>
       {err&&<div style={{background:"#FEF2F2",borderRadius:6,padding:"9px 12px",marginBottom:16,fontSize:13,color:C.due}}>{err}</div>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
         <Field label="Insurance company" required><SI value={f.insurer} onChange={set("insurer")} placeholder="e.g. Blue Cross"/></Field>
         <Field label="Plan name"><SI value={f.planName} onChange={set("planName")} placeholder="e.g. PPO Gold"/></Field>
         <Field label="Type"><SS value={f.type} onChange={set("type")} options={INS_TYPES} placeholder="Select type"/></Field>
@@ -690,7 +702,7 @@ function ClinicModal({clinic,onSave,onClose}){
   return (
     <Modal title={f.id?"Edit clinic":"Add clinic"} onClose={onClose}>
       {err&&<div style={{background:"#FEF2F2",borderRadius:6,padding:"9px 12px",marginBottom:16,fontSize:13,color:C.due}}>{err}</div>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
         <Field label="Category"><SS value={f.category} onChange={set("category")} options={CATEGORIES} placeholder="Select category"/></Field>
         <Field label="Type"><SS value={f.type} onChange={set("type")} options={TYPES} placeholder="Select type"/></Field>
       </div>
@@ -727,6 +739,7 @@ function ClinicRow({clinic,color,last,onEdit,onDelete}){
   );
 }
 function ClinicsTab(){
+  const isMobile=useIsMobile();
   const [clinics,setClinics]=useState([]); const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [confirm,setConfirm]=useState(null);
   const [fCat,setFCat]=useState("All"); const [fType,setFType]=useState(""); const [fLoc,setFLoc]=useState("");
   const [collapsed,setCollapsed]=useState({});
@@ -754,21 +767,25 @@ function ClinicsTab(){
           <span style={{fontSize:12,fontWeight:700,color:color,letterSpacing:0.4,textTransform:"uppercase"}}>{label}</span>
           <span style={{fontSize:11,fontWeight:600,color:color,background:C.surface+"CC",borderRadius:20,padding:"2px 9px"}}>{items.length}</span>
         </div>
-        {!collapsed[cat]&&(
-          <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,padding:"0 16px 8px 16px"}}>
-            {[{h:"",k:null},{h:"Clinic",k:"name"},{h:"Type",k:"type"},{h:"Contact",k:null},{h:"Notes",k:null}].map((col,i)=>{
-              const active=col.k&&sort.key===col.k;
-              return (
-                <div key={i} onClick={col.k?()=>onSort(col.k):undefined}
-                  style={{fontSize:10,fontWeight:700,color:active?C.accent:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:active?1:0.6,textAlign:"left",cursor:col.k?"pointer":"default",userSelect:"none"}}>
-                  {col.h}{active&&<span style={{fontSize:8,marginLeft:3}}>{sort.dir==="asc"?"▲":"▼"}</span>}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
-      {!collapsed[cat]&&items.map((c,i)=><ClinicRow key={c.id} clinic={c} color={color} last={i===items.length-1} onEdit={()=>setModal(c)} onDelete={()=>setConfirm({id:c.id,message:"Remove this clinic?"})}/>)}
+      {!collapsed[cat]&&(
+        <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <div style={{minWidth:isMobile?620:"auto"}}>
+            <div style={{display:"grid",gridTemplateColumns:CLINIC_COLS,gap:14,padding:"8px 16px",borderBottom:`1px solid ${C.lineSoft}`,background:tint}}>
+              {[{h:"",k:null},{h:"Clinic",k:"name"},{h:"Type",k:"type"},{h:"Contact",k:null},{h:"Notes",k:null}].map((col,i)=>{
+                const active=col.k&&sort.key===col.k;
+                return (
+                  <div key={i} onClick={col.k?()=>onSort(col.k):undefined}
+                    style={{fontSize:10,fontWeight:700,color:active?C.accent:C.sub,letterSpacing:0.5,textTransform:"uppercase",opacity:active?1:0.6,textAlign:"left",cursor:col.k?"pointer":"default",userSelect:"none"}}>
+                    {col.h}{active&&<span style={{fontSize:8,marginLeft:3}}>{sort.dir==="asc"?"▲":"▼"}</span>}
+                  </div>
+                );
+              })}
+            </div>
+            {items.map((c,i)=><ClinicRow key={c.id} clinic={c} color={color} last={i===items.length-1} onEdit={()=>setModal(c)} onDelete={()=>setConfirm({id:c.id,message:"Remove this clinic?"})}/>)}
+          </div>
+        </div>
+      )}
     </div>
   );
   const UNCAT_TINT="#F1F3F2";
@@ -915,6 +932,7 @@ function ReportsTab(){
 
 // ─── Dashboard tab ──────────────────────────────────────────────────────────────
 function DashboardTab({onOpenAppt}){
+  const isMobile=useIsMobile();
   const [apts,setApts]=useState([]); const [loading,setLoading]=useState(true);
   const today=new Date().toISOString().slice(0,10);
   const [year,setYear]=useState(new Date().getFullYear().toString());
@@ -1007,7 +1025,7 @@ function DashboardTab({onOpenAppt}){
       </div>
 
       {/* Lists */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>
         {/* Pending claims — completed appointments awaiting insurance */}
         <div style={{...s.card,padding:"16px 18px",minWidth:0}}>
           <div style={{fontSize:11,fontWeight:700,color:C.pending,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Pending insurance claims</div>
@@ -1238,7 +1256,7 @@ function SettingsTab({user}){
       <div style={{fontSize:13,color:C.sub,marginBottom:22}}>Signed in as {user}</div>
 
       <SettingsCard title="Your location" desc="Set where you are so clinic and location searches on Google Maps are tuned to your area.">
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
           <Field label="Country"><SS value={loc.country} onChange={v=>setLoc(p=>({...p,country:v,state:""}))} options={COUNTRIES} placeholder="Select country"/></Field>
           <Field label="State / Province">
             {stateOptions
@@ -1253,7 +1271,7 @@ function SettingsTab({user}){
 
       <SettingsCard title="Change password" desc="Confirm your current password, then set a new one.">
         <Field label="Current password"><input type="password" value={pwOld} onChange={e=>setPwOld(e.target.value)} placeholder="Current password" style={s.input}/></Field>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"0 16px"}}>
           <Field label="New password"><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="New password" style={s.input}/></Field>
           <Field label="Confirm new password"><input type="password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="Re-enter new password" style={s.input}/></Field>
         </div>
@@ -1278,6 +1296,7 @@ export default function App(){
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("dashboard");
   const [checking, setChecking] = useState(true);
+  const isMobile = useIsMobile();
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user?.email || null);
@@ -1290,34 +1309,35 @@ export default function App(){
   }, []);
   if (checking) return <div style={{minHeight:"100vh",background:C.canvas}}/>;
   if (!user) return <LoginPage onLogin={u=>{setUser(u);setTab("dashboard");}}/>;
+  const pad=isMobile?"14px":"24px";
   return (
     <div style={{minHeight:"100vh",background:C.canvas,fontFamily:FONT,color:C.ink}}>
       {/* Top bar */}
       <div style={{borderBottom:`1px solid ${C.line}`,background:C.surface}}>
-        <div style={{maxWidth:1040,margin:"0 auto",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{maxWidth:1040,margin:"0 auto",padding:`${isMobile?"12px":"16px"} ${pad}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
             <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:9,background:C.accent,color:"#fff",flexShrink:0}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-4.35-9.5-8.5C1 9 2.5 5.5 6 5.5c2 0 3.2 1.2 4 2.5.8-1.3 2-2.5 4-2.5 3.5 0 5 3.5 3.5 7C19 16.65 12 21 12 21Z"/></svg>
             </span>
-            <span style={{fontSize:16,fontWeight:800,letterSpacing:-0.3,color:C.ink}}>Healthcare Tracker</span>
+            <span style={{fontSize:isMobile?14:16,fontWeight:800,letterSpacing:-0.3,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Healthcare Tracker</span>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <span style={{fontSize:13,color:C.sub,fontWeight:500}}>{user}</span>
-            <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${C.line}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:12.5,fontFamily:FONT,fontWeight:600}}>Sign out</button>
+          <div style={{display:"flex",alignItems:"center",gap:isMobile?8:14,flexShrink:0}}>
+            {!isMobile&&<span style={{fontSize:13,color:C.sub,fontWeight:500}}>{user}</span>}
+            <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${C.line}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:12.5,fontFamily:FONT,fontWeight:600,whiteSpace:"nowrap"}}>Sign out</button>
           </div>
         </div>
       </div>
       {/* Nav */}
       <div style={{borderBottom:`1px solid ${C.line}`,background:C.surface,position:"sticky",top:0,zIndex:50}}>
-        <div style={{maxWidth:1040,margin:"0 auto",padding:"0 24px",display:"flex",gap:4,overflowX:"auto"}}>
+        <div style={{maxWidth:1040,margin:"0 auto",padding:`0 ${pad}`,display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
           {TABS.map(t=>{const active=tab===t.id;return(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"14px 4px",marginRight:22,border:"none",background:"none",cursor:"pointer",fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"14px 4px",marginRight:isMobile?18:22,border:"none",background:"none",cursor:"pointer",fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,
               color:active?C.accent:C.sub,borderBottom:`2.5px solid ${active?C.accent:"transparent"}`,whiteSpace:"nowrap",transition:"color .12s"}}>{t.label}</button>
           );})}
         </div>
       </div>
       {/* Content */}
-      <div style={{maxWidth:1040,margin:"0 auto",padding:"32px 24px 64px"}}>
+      <div style={{maxWidth:1040,margin:"0 auto",padding:isMobile?"20px 14px 56px":"32px 24px 64px"}}>
         {tab==="dashboard"&&<DashboardTab onOpenAppt={()=>setTab("appointments")}/>}
         {tab==="appointments"&&<AppointmentsTab/>}
         {tab==="reports"&&<ReportsTab/>}
